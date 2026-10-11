@@ -1,0 +1,3359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gather</title>
+<meta name="description" content="A small colony sim. Order three settlers to chop, mine and gather, build shelter and fire, and keep them alive through cold nights.">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #1a1d24;
+    color: #e8ecf1;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+  body { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+
+  /* ---------- top bar ---------- */
+  #hud {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: #23272f;
+    border: 1px solid #333a45;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 14px;
+    flex: 0 0 auto;
+  }
+  h1 {
+    margin: 0 6px 0 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #9fe6b0;
+  }
+  .stat { display: flex; align-items: baseline; gap: 5px; }
+  .stat .label { color: #8b94a3; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+  #tempStat .value { color: #6cb2eb; }
+  #woodStat .value { color: #c89a6b; }
+  #stoneStat .value { color: #a9b2bf; }
+  #foodStat .value { color: #e2b04a; }
+  #mealStat .value { color: #e8775a; }
+  #fiberStat .value { color: #9fc78a; }
+  #popStat .value { color: #9fe6b0; }
+  .spacer { flex: 1; }
+  .divider { width: 1px; align-self: stretch; background: #333a45; }
+
+  button {
+    background: #2c313b;
+    color: #cbd3de;
+    border: 1px solid #3a414d;
+    border-radius: 6px;
+    padding: 6px 11px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  button:hover { background: #353b46; }
+  button.active { background: #9fe6b0; color: #1a1d24; border-color: #9fe6b0; }
+  .speeds { display: flex; gap: 5px; }
+
+  /* ---------- main split ---------- */
+  #main { flex: 1 1 auto; display: flex; gap: 8px; min-height: 0; }
+  #stage {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  canvas {
+    max-width: 100%;
+    max-height: 100%;
+    background: #0e1116;
+    border: 1px solid #333a45;
+    border-radius: 8px;
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  /* ---------- sidebar ---------- */
+  #side {
+    flex: 0 0 268px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .panel {
+    background: #23272f;
+    border: 1px solid #333a45;
+    border-radius: 10px;
+    padding: 10px;
+    flex: 0 0 auto;
+  }
+  .panel h2 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8b94a3;
+  }
+  .tools { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tools button { padding: 5px 9px; font-size: 12px; }
+  .tools button .hot { color: #6f7a89; font-weight: 700; margin-right: 4px; }
+  .tools button.active .hot { color: #35603f; }
+  .tools button.poor { border-color: #5c3a3a; color: #8d7a7a; }
+  .toolgroup + .toolgroup { margin-top: 8px; }
+  .toolgroup .gl { font-size: 10px; color: #6f7a89; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
+  #tip { font-size: 12px; color: #8b94a3; line-height: 1.45; min-height: 34px; }
+  #tip b { color: #cbd3de; }
+
+  #selBody { font-size: 12.5px; line-height: 1.6; color: #cbd3de; }
+  #selBody .nm { font-weight: 700; font-size: 14px; color: #e8ecf1; }
+  #selBody .sub { color: #8b94a3; font-size: 11.5px; }
+  .needrow { display: flex; align-items: center; gap: 7px; margin-top: 4px; }
+  .needrow .nl { width: 52px; color: #8b94a3; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .bar { flex: 1; height: 7px; background: #1a1d24; border-radius: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 4px; }
+  .needrow .nv { width: 30px; text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; color: #8b94a3; }
+
+  #msBody { font-size: 12.5px; }
+  .ms { display: flex; gap: 7px; align-items: flex-start; padding: 3px 0; color: #8b94a3; }
+  .ms .tick { color: #4e5665; font-weight: 700; width: 13px; flex: 0 0 13px; }
+  .ms.done { color: #9fe6b0; }
+  .ms.done .tick { color: #9fe6b0; }
+  .ms .md { display: block; font-size: 11px; color: #6f7a89; }
+
+  #logBody { font-size: 12px; line-height: 1.55; color: #9aa4b2; max-height: 148px; overflow-y: auto; scrollbar-width: thin; }
+  #logBody div { padding: 1px 0; }
+  #logBody .d { color: #5d6675; margin-right: 5px; font-variant-numeric: tabular-nums; }
+  #logBody .bad { color: #e8775a; }
+  #logBody .good { color: #9fe6b0; }
+
+  /* ---------- overlays ---------- */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(12, 14, 19, 0.82);
+    border-radius: 8px;
+  }
+  #overlay.show { display: flex; }
+  #overlay .card {
+    background: #23272f;
+    border: 1px solid #3a414d;
+    border-radius: 12px;
+    padding: 24px 30px;
+    text-align: center;
+    max-width: 360px;
+  }
+  #overlay h3 { margin: 0 0 6px; font-size: 22px; color: #e8775a; }
+  #overlay p { margin: 0 0 4px; font-size: 14px; color: #9aa4b2; line-height: 1.6; }
+  #overlay .big { font-size: 15px; color: #e8ecf1; font-weight: 600; }
+  #overlay button { margin-top: 16px; padding: 9px 20px; font-size: 14px; }
+
+  #toast {
+    position: absolute;
+    left: 50%;
+    top: 18px;
+    transform: translateX(-50%);
+    background: rgba(26, 29, 36, 0.94);
+    border: 1px solid #9fe6b0;
+    color: #9fe6b0;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s;
+  }
+  #toast.show { opacity: 1; }
+
+  #selftest {
+    position: fixed;
+    inset: 0;
+    background: #11141a;
+    color: #cbd3de;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 24px 28px;
+    overflow: auto;
+    z-index: 50;
+    display: none;
+    white-space: pre-wrap;
+  }
+  #selftest.show { display: block; }
+  #selftest .ok { color: #9fe6b0; }
+  #selftest .fail { color: #e8775a; font-weight: 700; }
+  #selftest h4 { color: #e8ecf1; font-size: 15px; margin: 18px 0 6px; font-family: system-ui, sans-serif; }
+  #selftest .sum { font-size: 15px; font-weight: 700; margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <h1>GATHER</h1>
+  <div class="stat" id="dayStat"><span class="label">Day</span><span class="value">1</span></div>
+  <div class="stat" id="clockStat"><span class="label">Time</span><span class="value">06:00</span></div>
+  <div class="stat" id="tempStat"><span class="label">Temp</span><span class="value">12&deg;</span></div>
+  <div class="stat" id="popStat"><span class="label">Settlers</span><span class="value">3</span></div>
+  <div class="divider"></div>
+  <div class="stat" id="woodStat"><span class="label">Wood</span><span class="value">0</span></div>
+  <div class="stat" id="stoneStat"><span class="label">Stone</span><span class="value">0</span></div>
+  <div class="stat" id="fiberStat"><span class="label">Fiber</span><span class="value">0</span></div>
+  <div class="stat" id="foodStat"><span class="label">Food</span><span class="value">0</span></div>
+  <div class="stat" id="mealStat"><span class="label">Meals</span><span class="value">0</span></div>
+  <div class="spacer"></div>
+  <div class="speeds">
+    <button data-speed="0">Pause</button>
+    <button data-speed="1" class="active">1&times;</button>
+    <button data-speed="2">2&times;</button>
+    <button data-speed="4">4&times;</button>
+  </div>
+  <button id="restartBtn">Restart</button>
+</div>
+
+<div id="main">
+  <div id="stage">
+    <canvas id="canvas" width="1152" height="864"></canvas>
+    <div id="toast"></div>
+    <div id="overlay">
+      <div class="card">
+        <h3>The colony is gone</h3>
+        <p class="big" id="ovSummary"></p>
+        <p id="ovDetail"></p>
+        <button id="ovRestart">Start again</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="side">
+    <div class="panel">
+      <h2>Orders</h2>
+      <div id="toolsWork" class="tools"></div>
+      <div class="toolgroup" style="margin-top:10px">
+        <div class="gl">Build</div>
+        <div id="toolsBuild" class="tools"></div>
+      </div>
+      <div class="toolgroup">
+        <div class="gl">Overlay</div>
+        <div id="toolsView" class="tools"></div>
+      </div>
+      <div id="tip" style="margin-top:9px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Selection</h2>
+      <div id="selBody"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Milestones</h2>
+      <div id="msBody"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Log</h2>
+      <div id="logBody"></div>
+    </div>
+  </div>
+</div>
+
+<div id="selftest"></div>
+
+<script>
+"use strict";
+// ===================== CONFIG =====================
+const CFG = {
+  COLS: 48,                  // map width in tiles
+  ROWS: 36,                  // map height in tiles
+  TILE: 24,                  // px per tile (canvas is COLS*TILE x ROWS*TILE)
+
+  ZOOM_MIN: 1,               // zoomed out, the whole map fits the canvas
+  ZOOM_MAX: 5,               // zoomed in, a tile is this many times its base size
+  ZOOM_WHEEL: 0.0016,        // zoom change per pixel of wheel movement
+  PAN_KEY: 3,                // tiles an arrow key nudges the view
+
+  DAY_LENGTH: 150,           // sim-seconds in one day/night cycle
+  DAWN: 0.0,                 // day progress 0 == 06:00, so the clock starts at dawn
+  NIGHT_START: 0.70,         // day progress where darkness begins to fall
+  DAWN_FADE: 0.10,           // how much of the morning the sunrise takes to lift
+
+  START_SETTLERS: 3,         // the three you begin with
+  POP_CAP: 24,               // stop sending newcomers past this (keeps the sim cheap)
+
+  NEED_MAX: 100,
+  HUNGER_RATE: 100 / 400,    // hunger empties in ~2.7 days of not eating
+  STAMINA_RATE: 100 / 260,   // awake stamina drains in ~1.7 days
+  SLEEP_RECOVER: 100 / 42,   // a full night in a bed is a full stamina bar
+  GROUND_SLEEP_MULT: 0.45,   // sleeping on bare ground is much less restful
+  HEAL_RATE: 100 / 120,      // health regrows when every need is above zero
+  STARVE_DMG: 100 / 70,      // damage per sim-second at zero hunger
+  FREEZE_DMG: 100 / 45,      // the cold kills faster than hunger
+  EXHAUST_DMG: 100 / 150,    // collapsing from exhaustion is slow but real
+
+  URGENT_HUNGER: 42,         // below this a settler drops work to eat
+  URGENT_WARMTH: 55,         // below this a settler drops work to find heat
+  URGENT_STAMINA: 20,        // below this a settler drops work to sleep
+  NIGHT_SLEEP_STAMINA: 72,   // at night they will turn in at this much stamina
+  SATED: 92,                 // stop eating once hunger is back up here
+
+  COMFORT_TEMP: 14,          // degrees at or above this and a settler warms up
+  WARMTH_LOSS: 0.085,        // warmth lost per sim-second per degree of deficit
+  WARMTH_GAIN: 7.5,          // warmth regained per sim-second when comfortable
+  TEMP_DAY_AMP: 9,           // midday is this much warmer than dawn
+  TEMP_BASE_START: 17,       // average temperature on day 1
+  TEMP_BASE_DROP: 1.15,      // ...and it slides this much colder every day
+  TEMP_BASE_FLOOR: -14,      // the deep-winter floor
+  FROST_TEMP: 2,             // HUD warns about frost when the night low is under this
+
+  FIRE_HEAT: 27,             // degrees added at the heart of a lit campfire
+  FIRE_RADIUS: 4.6,          // tiles of warmth around a campfire (linear falloff)
+  FIRE_LIGHT: 6.4,           // tiles of light around a campfire at night
+  FIRE_FUEL_MAX: 100,
+  FIRE_BURN_RATE: 100 / 120, // a full campfire burns out in ~0.8 of a day
+  FIRE_REFUEL_AT: 62,        // settlers top a fire up once fuel drops under this
+  FIRE_FUEL_PER_WOOD: 30,    // fuel gained per wood thrown on
+  FIRE_WOOD_PER_REFUEL: 2,   // wood spent per refuel trip
+
+  INDOOR_WARMTH_MIN: 7,      // degrees a wood-walled room holds in
+  INDOOR_WARMTH_MAX: 14,     // ...and what a fully stone-walled room holds in
+  INDOOR_LOSS_MULT: 0.5,     // indoors, warmth drains at half rate
+
+  SPEED: 2.35,               // walking speed in tiles per sim-second
+  FLOOR_SPEED_MULT: 1.3,     // paved floors move settlers along faster
+  WORK_RATE: 1.0,            // base work units per sim-second
+
+  CHOP_WORK: 3.4,            // work to fell a tree
+  MINE_WORK: 4.6,            // work to break a rock outcrop
+  GATHER_WORK: 1.9,          // work to pick berries, cut reeds or harvest a plot
+  HAUL_PICKUP: 0.35,         // work to pick a pile up
+  COOK_WORK: 3.0,            // work to cook a batch of meals
+  REFUEL_WORK: 0.8,          // work to feed a fire
+
+  TREE_WOOD: 4,              // wood from one tree
+  ROCK_STONE: 5,             // stone from one outcrop
+  BERRY_FOOD: 3,             // food per berry picking
+  REEDS_FIBER: 3,            // fiber per reed cutting
+  BERRY_REGROW: 120,         // sim-seconds for a berry bush to bear again
+  REEDS_REGROW: 130,         // ...and for reeds to grow back
+  TREE_SPROUT_TIME: 26,      // a new sapling tries to appear this often
+  TREE_CAP: 150,             // never grow past this many trees
+
+  FARM_GROW: 180,            // sim-seconds from planting to harvest (~1.2 days)
+  FARM_FOOD: 6,              // food per harvested plot
+  COOK_BATCH: 4,             // raw food consumed per cooking job
+  COOK_YIELD: 3,             // meals produced per cooking job
+  MEAL_STOCK: 10,            // cook until this many meals are banked
+  EAT_RAW: 26,               // hunger restored by raw food
+  EAT_MEAL: 62,              // hunger restored by a cooked meal
+  EAT_TIME: 2.4,             // sim-seconds spent eating
+
+  CARRY_MAX: 8,              // most of one resource a settler hauls at once
+  JOB_REFRESH: 0.4,          // sim-seconds between job-list rebuilds
+  PATH_BUDGET: 9,            // most path searches run in a single frame
+  UNREACHABLE_COOLDOWN: 6,   // sim-seconds before retrying a job nobody could reach
+  MILESTONE_CHECK: 1.0,      // sim-seconds between milestone checks
+
+  START_WOOD: 34,            // a starting kit: enough fire, food and fiber to
+                             // get farms planted before the stores run dry
+  START_STONE: 6,
+  START_FIBER: 8,
+  START_FOOD: 30,
+  START_MEAL: 6,
+
+  NUM_TREES: 96,
+  NUM_ROCKS: 54,
+  NUM_BERRY: 40,
+  NUM_REEDS: 22,
+  LOG_MAX: 60,               // log lines kept
+  ALERT_EVERY: 3,            // sim-seconds between colony health checks
+};
+
+const TILE = CFG.TILE;
+const COLS = CFG.COLS;
+const ROWS = CFG.ROWS;
+const NTILES = COLS * ROWS;
+
+// Buildings. `solid` blocks movement; `encloses` counts as a room boundary.
+const BLD = {
+  wall:  { name: "Wood Wall",  cost: { wood: 2 },            work: 3.0, solid: true,  encloses: true,  stone: false },
+  swall: { name: "Stone Wall", cost: { stone: 3 },           work: 5.0, solid: true,  encloses: true,  stone: true  },
+  door:  { name: "Door",       cost: { wood: 3 },            work: 3.0, solid: false, encloses: true,  stone: false },
+  floor: { name: "Floor",      cost: { wood: 1 },            work: 1.6, solid: false, encloses: false, stone: false },
+  bed:   { name: "Bed",        cost: { wood: 3, fiber: 2 },  work: 4.2, solid: false, encloses: false, stone: false },
+  fire:  { name: "Campfire",   cost: { wood: 5 },            work: 3.4, solid: false, encloses: false, stone: false },
+  farm:  { name: "Farm Plot",  cost: { wood: 1, fiber: 1 },  work: 3.4, solid: false, encloses: false, stone: false,
+           terrain: ["dirt", "grass"] },
+  stock: { name: "Stockpile",  cost: {},                     work: 0.5, solid: false, encloses: false, stone: false },
+};
+
+// Harvestable scatter. `tool` is the order that works it; `res` is what it yields.
+const OBJ = {
+  tree:  { name: "Tree",        tool: "chop",   work: CFG.CHOP_WORK,   res: "wood",  amount: CFG.TREE_WOOD,    regrow: 0 },
+  rock:  { name: "Rock",        tool: "mine",   work: CFG.MINE_WORK,   res: "stone", amount: CFG.ROCK_STONE,   regrow: 0 },
+  berry: { name: "Berry Bush",  tool: "gather", work: CFG.GATHER_WORK, res: "food",  amount: CFG.BERRY_FOOD,   regrow: CFG.BERRY_REGROW },
+  reeds: { name: "Reeds",       tool: "gather", work: CFG.GATHER_WORK, res: "fiber", amount: CFG.REEDS_FIBER,  regrow: CFG.REEDS_REGROW },
+};
+
+const RES_NAMES = { wood: "Wood", stone: "Stone", fiber: "Fiber", food: "Food", meal: "Meals" };
+const RES_COLOR = { wood: "#c89a6b", stone: "#a9b2bf", fiber: "#9fc78a", food: "#e2b04a", meal: "#e8775a" };
+
+const NAMES = [
+  "Abel", "Brie", "Cole", "Dara", "Emil", "Fenn", "Gaia", "Hollis", "Ivo", "Juna",
+  "Kell", "Lior", "Mara", "Nils", "Oona", "Pike", "Quill", "Rosa", "Soren", "Tove",
+  "Udo", "Vera", "Wren", "Xan", "Yara", "Zeph", "Alder", "Bram", "Clove", "Dune",
+];
+
+// ===================== STATE =====================
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const lightCanvas = document.createElement("canvas");
+const lctx = lightCanvas.getContext("2d");
+
+let tiles;          // flat array of tile objects, index y*COLS+x
+let settlers;       // living settlers
+let jobs;           // open + claimed work
+let res = { wood: 0, stone: 0, fiber: 0, food: 0, meal: 0 };   // zeroed up front so the
+                    // palette can price buildings before a world has been generated
+let rooms;          // enclosed areas, from the flood fill
+let fireIdx;        // tile indices of campfires
+let bedIdx;         // tile indices of beds
+let stockIdx;       // tile indices of stockpiles
+let farmIdx;        // tile indices of farm plots
+let milestones;     // goal list with .done flags
+let log;            // recent events, newest last
+
+let day, dayTimer, speed, running, animT;
+let nextId, nameCursor, peakPop, treeCount, deaths;
+let jobTimer, msTimer, sproutTimer, alertTimer;
+let alerts;         // latched warnings, so the log says each thing once
+let roomsDirty, indexDirty, hudDirty;
+let pathBudget;
+
+let tool = "info";          // active palette tool
+let showTemp = false;       // temperature overlay
+let showRooms = false;      // enclosure overlay
+let selection = null;       // { kind:'settler', id } | { kind:'tile', i }
+let drag = null;            // { x0, y0, x1, y1 } in tiles while painting
+let hover = { tx: -1, ty: -1 };
+let cam = { x: 0, y: 0, z: 1 };   // view origin in world px, z = zoom factor
+let pan = null;                   // middle-drag panning anchor
+const vb = { x0: 0, y0: 0, x1: COLS - 1, y1: ROWS - 1 };   // visible tile range
+let selfTesting = false;    // suppresses saving while the self-test runs
+
+// ---- helpers ----
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+
+const inBounds = (tx, ty) => tx >= 0 && ty >= 0 && tx < COLS && ty < ROWS;
+const idx = (tx, ty) => ty * COLS + tx;
+const txOf = (i) => i % COLS;
+const tyOf = (i) => (i / COLS) | 0;
+const at = (tx, ty) => (inBounds(tx, ty) ? tiles[idx(tx, ty)] : null);
+const cx = (i) => (txOf(i) + 0.5) * TILE;   // tile centre in px
+const cy = (i) => (tyOf(i) + 0.5) * TILE;
+const tileAtPx = (px, py) => {
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  return inBounds(tx, ty) ? idx(tx, ty) : -1;
+};
+
+function makeTile(terrain) {
+  return {
+    terrain,          // grass | dirt | stone | water | sand
+    obj: null,        // { kind, amount, regrow }
+    bld: null,        // { kind, fuel?, growth?, owner? }
+    bp: null,         // blueprint { kind, prog }
+    order: null,      // 'chop' | 'mine' | 'gather'
+    decon: false,     // marked for tear-down by the cancel tool
+    pile: null,       // { kind, amount } loose resources on the ground
+    room: -1,         // index into `rooms`, or -1 outdoors
+    shade: 0,         // per-tile cosmetic noise, fixed at generation
+  };
+}
+
+function makeSettler(i, newcomer) {
+  const s = {
+    id: nextId++,
+    name: NAMES[nameCursor++ % NAMES.length],
+    hue: rand(0, 360),
+    x: cx(i), y: cy(i),
+    hunger: newcomer ? 72 : CFG.NEED_MAX,
+    stamina: newcomer ? 80 : CFG.NEED_MAX,
+    warmth: newcomer ? 82 : CFG.NEED_MAX,
+    health: CFG.NEED_MAX,
+    workSpeed: rand(0.85, 1.18),   // small individual flair
+    moveSpeed: rand(0.9, 1.12),
+    job: null,        // the claimed job object
+    act: null,        // 'work' | 'eat' | 'sleep' | 'warm' | 'deliver' | null
+    target: -1,       // tile index the current act is heading for
+    path: null,       // array of tile indices still to walk
+    prog: 0,          // work/act progress accumulator
+    carrying: null,   // { kind, amount }
+    bed: -1,          // tile index of a claimed bed
+    retry: 0,         // cooldown after failing to path somewhere
+    phase: rand(0, Math.PI * 2),
+  };
+  return s;
+}
+
+// ===================== WORLD GEN =====================
+// Smooth value noise on a coarse lattice - enough to carve believable terrain.
+function noiseField(cell, octaves) {
+  const grid = [];
+  const gw = Math.ceil(COLS / cell) + 2, gh = Math.ceil(ROWS / cell) + 2;
+  for (let o = 0; o < octaves; o++) {
+    const g = new Float32Array(gw * gh);
+    for (let k = 0; k < g.length; k++) g[k] = Math.random();
+    grid.push(g);
+  }
+  const sample = (g, fx, fy) => {
+    const x = fx, y = fy;
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const tx = x - x0, ty = y - y0;
+    const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const a = g[y0 * gw + x0], b = g[y0 * gw + x0 + 1];
+    const c = g[(y0 + 1) * gw + x0], d = g[(y0 + 1) * gw + x0 + 1];
+    return lerp(lerp(a, b, sx), lerp(c, d, sx), sy);
+  };
+  const out = new Float32Array(NTILES);
+  for (let ty = 0; ty < ROWS; ty++) {
+    for (let tx = 0; tx < COLS; tx++) {
+      let v = 0, amp = 1, scale = cell, total = 0;
+      for (let o = 0; o < octaves; o++) {
+        v += amp * sample(grid[o], tx / scale, ty / scale);
+        total += amp;
+        amp *= 0.5;
+        scale *= 0.5;
+      }
+      out[idx(tx, ty)] = v / total;
+    }
+  }
+  return out;
+}
+
+function seedWorld() {
+  tiles = new Array(NTILES);
+  const height = noiseField(9, 3);
+  const wet = noiseField(7, 2);
+
+  for (let ty = 0; ty < ROWS; ty++) {
+    for (let tx = 0; tx < COLS; tx++) {
+      const i = idx(tx, ty);
+      const h = height[i], w = wet[i];
+      let terrain = "grass";
+      if (w > 0.70 && h < 0.44) terrain = "water";
+      else if (w > 0.63 && h < 0.50) terrain = "sand";
+      else if (h > 0.63) terrain = "stone";
+      else if (h < 0.40 || w < 0.33) terrain = "dirt";
+      const t = makeTile(terrain);
+      t.shade = Math.random();
+      tiles[i] = t;
+    }
+  }
+
+  // A guaranteed clearing in the middle so the first three always have room.
+  const hx = COLS >> 1, hy = ROWS >> 1;
+  for (let ty = hy - 4; ty <= hy + 4; ty++) {
+    for (let tx = hx - 5; tx <= hx + 5; tx++) {
+      const t = at(tx, ty);
+      if (!t) continue;
+      if (t.terrain === "water") t.terrain = "sand";
+      t.obj = null;
+    }
+  }
+
+  scatterObjects(height, wet);
+  placeStartingColony(hx, hy);
+
+  res = {
+    wood: CFG.START_WOOD, stone: CFG.START_STONE, fiber: CFG.START_FIBER,
+    food: CFG.START_FOOD, meal: CFG.START_MEAL,
+  };
+  jobs = [];
+  settlers = [];
+  rooms = [];
+  log = [];
+  day = 1;
+  dayTimer = CFG.DAY_LENGTH * 0.25;   // open at midday, not at a freezing dawn
+  animT = 0;
+  nextId = 1;
+  nameCursor = Math.floor(Math.random() * NAMES.length);
+  peakPop = CFG.START_SETTLERS;
+  deaths = 0;
+  jobTimer = 0;
+  msTimer = 0;
+  sproutTimer = 0;
+  alertTimer = 0;
+  alerts = {};
+  running = true;
+  selection = null;
+  resetCam();
+  milestones = makeMilestones();
+
+  reindex();
+  recomputeRooms();
+
+  for (let n = 0; n < CFG.START_SETTLERS; n++) {
+    const i = openSpotNear(hx, hy, 4);
+    settlers.push(makeSettler(i, false));
+  }
+  countTrees();
+  addLog("Three settlers make camp. One more will find you each dawn.", "good");
+  hudDirty = true;
+}
+
+// Scatter trees, rock, berries and reeds according to the generated fields.
+function scatterObjects(height, wet) {
+  const put = (kind, count, test) => {
+    let placed = 0, guard = 0;
+    while (placed < count && guard++ < count * 60) {
+      const tx = randInt(0, COLS - 1), ty = randInt(0, ROWS - 1);
+      const i = idx(tx, ty);
+      const t = tiles[i];
+      if (t.obj || t.terrain === "water") continue;
+      if (!test(height[i], wet[i], t, tx, ty)) continue;
+      t.obj = { kind, amount: OBJ[kind].amount, regrow: 0 };
+      placed++;
+    }
+  };
+  put("tree", CFG.NUM_TREES, (h, w, t) => t.terrain === "grass" && w > 0.38);
+  put("rock", CFG.NUM_ROCKS, (h, w, t) => t.terrain === "stone" || h > 0.55);
+  put("berry", CFG.NUM_BERRY, (h, w, t) => t.terrain === "grass" || t.terrain === "dirt");
+  put("reeds", CFG.NUM_REEDS, (h, w, t, tx, ty) => nearWater(tx, ty));
+  // reeds want waterside tiles - re-seat any that landed dry
+  for (let i = 0; i < NTILES; i++) {
+    const t = tiles[i];
+    if (t.obj && t.obj.kind === "reeds" && !nearWater(txOf(i), tyOf(i))) {
+      t.obj = null;
+      for (let guard = 0; guard < 300; guard++) {
+        const tx = randInt(0, COLS - 1), ty = randInt(0, ROWS - 1);
+        const c = at(tx, ty);
+        if (c && !c.obj && c.terrain !== "water" && nearWater(tx, ty)) {
+          c.obj = { kind: "reeds", amount: CFG.REEDS_FIBER, regrow: 0 };
+          break;
+        }
+      }
+    }
+  }
+}
+
+function nearWater(tx, ty) {
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const t = at(tx + dx, ty + dy);
+      if (t && t.terrain === "water") return true;
+    }
+  }
+  return false;
+}
+
+// The starting kit: a stockpile, a lit campfire and a little clear ground.
+function placeStartingColony(hx, hy) {
+  const fire = at(hx, hy);
+  fire.obj = null;
+  fire.bld = { kind: "fire", fuel: CFG.FIRE_FUEL_MAX };
+  for (let dy = 0; dy < 2; dy++) {
+    for (let dx = 2; dx < 5; dx++) {
+      const t = at(hx + dx, hy + dy);
+      if (t && t.terrain !== "water") { t.obj = null; t.bld = { kind: "stock" }; }
+    }
+  }
+}
+
+// Nearest walkable tile to (tx,ty) within `r`, falling back to anything walkable.
+function openSpotNear(tx, ty, r) {
+  let best = -1, bestD = Infinity;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const x = tx + dx, y = ty + dy;
+      if (!inBounds(x, y)) continue;
+      const i = idx(x, y);
+      if (!walkable(i)) continue;
+      const d = Math.abs(dx) + Math.abs(dy);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+  }
+  if (best >= 0) return best;
+  for (let i = 0; i < NTILES; i++) if (walkable(i)) return i;
+  return 0;
+}
+
+function countTrees() {
+  treeCount = 0;
+  for (let i = 0; i < NTILES; i++) if (tiles[i].obj && tiles[i].obj.kind === "tree") treeCount++;
+}
+
+// Keep the building lookups in sync after anything is built or torn down.
+function reindex() {
+  fireIdx = []; bedIdx = []; stockIdx = []; farmIdx = [];
+  for (let i = 0; i < NTILES; i++) {
+    const b = tiles[i].bld;
+    if (!b) continue;
+    if (b.kind === "fire") fireIdx.push(i);
+    else if (b.kind === "bed") bedIdx.push(i);
+    else if (b.kind === "stock") stockIdx.push(i);
+    else if (b.kind === "farm") farmIdx.push(i);
+  }
+  indexDirty = false;
+}
+
+// ===================== PATHFINDING =====================
+function walkable(i) {
+  const t = tiles[i];
+  if (!t) return false;
+  if (t.terrain === "water") return false;
+  if (t.bld && BLD[t.bld.kind].solid) return false;
+  return true;
+}
+
+// Blueprints for solid walls still allow passage until they are finished, so a
+// settler can always walk out to build the last block of a room.
+function tileSpeedMult(i) {
+  const b = tiles[i].bld;
+  if (b && (b.kind === "floor" || b.kind === "stock")) return CFG.FLOOR_SPEED_MULT;
+  return 1;
+}
+
+// A* over the tile grid. 8-directional, no cutting corners through walls.
+// Returns an array of tile indices (excluding the start) or null if unreachable.
+const DIRS = [
+  [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+  [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
+];
+const _g = new Float32Array(NTILES);
+const _f = new Float32Array(NTILES);
+const _from = new Int32Array(NTILES);
+const _seen = new Int32Array(NTILES);
+let _pathEpoch = 1;
+
+function heuristic(ax, ay, bx, by) {
+  const dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
+  return (dx + dy) + (Math.SQRT2 - 2) * Math.min(dx, dy);
+}
+
+function findPath(start, goal) {
+  if (start === goal) return [];
+  if (!walkable(goal)) return null;
+  // the start is deliberately not required to be walkable: a settler can get
+  // built into a wall, and they have to be able to step back out of it
+  const epoch = _pathEpoch++;
+  const gx = txOf(goal), gy = tyOf(goal);
+  const heap = [start];
+  _g[start] = 0;
+  _f[start] = heuristic(txOf(start), tyOf(start), gx, gy);
+  _from[start] = -1;
+  _seen[start] = epoch;
+  const closed = new Set();
+
+  while (heap.length) {
+    // pop the lowest f - a linear scan is plenty for a 48x36 grid
+    let bi = 0;
+    for (let k = 1; k < heap.length; k++) if (_f[heap[k]] < _f[heap[bi]]) bi = k;
+    const cur = heap[bi];
+    heap[bi] = heap[heap.length - 1];
+    heap.pop();
+    if (cur === goal) {
+      const out = [];
+      let n = cur;
+      while (n !== start) { out.push(n); n = _from[n]; }
+      out.reverse();
+      return out;
+    }
+    if (closed.has(cur)) continue;
+    closed.add(cur);
+
+    const ctx_ = txOf(cur), cty = tyOf(cur);
+    for (const [dx, dy, cost] of DIRS) {
+      const nx = ctx_ + dx, ny = cty + dy;
+      if (!inBounds(nx, ny)) continue;
+      const ni = idx(nx, ny);
+      if (!walkable(ni) || closed.has(ni)) continue;
+      if (dx !== 0 && dy !== 0) {
+        // refuse diagonal moves that would clip a corner
+        if (!walkable(idx(ctx_ + dx, cty)) || !walkable(idx(ctx_, cty + dy))) continue;
+      }
+      const step = cost / tileSpeedMult(ni);
+      const ng = _g[cur] + step;
+      if (_seen[ni] === epoch && ng >= _g[ni]) continue;
+      _seen[ni] = epoch;
+      _g[ni] = ng;
+      _f[ni] = ng + heuristic(nx, ny, gx, gy);
+      _from[ni] = cur;
+      heap.push(ni);
+    }
+  }
+  return null;
+}
+
+// Nearest tile from a candidate list that the settler can actually reach.
+// Candidates are pre-sorted by straight-line distance so the first path that
+// succeeds is nearly always the best one, and we stop after a few tries.
+function nearestReachable(s, candidates, tries) {
+  if (!candidates.length) return null;
+  const si = settlerTile(s);
+  const sorted = candidates.slice().sort((a, b) =>
+    dist(s.x, s.y, cx(a), cy(a)) - dist(s.x, s.y, cx(b), cy(b)));
+  let attempts = 0;
+  for (const i of sorted) {
+    if (i === si) return { i, path: [] };
+    if (attempts++ >= (tries || 6)) break;
+    const p = findPath(si, i);
+    if (p) return { i, path: p };
+  }
+  return null;
+}
+
+function walkableNeighbours(i) {
+  const out = [];
+  const x = txOf(i), y = tyOf(i);
+  for (const [dx, dy] of DIRS) {
+    const nx = x + dx, ny = y + dy;
+    if (inBounds(nx, ny) && walkable(idx(nx, ny))) out.push(idx(nx, ny));
+  }
+  return out;
+}
+
+function settlerTile(s) {
+  const i = tileAtPx(s.x, s.y);
+  return i < 0 ? 0 : i;
+}
+
+// ===================== ROOMS & TEMPERATURE =====================
+// Anything walkable that cannot reach the map edge without crossing a wall or a
+// door is indoors. Rooms also record how much of their shell is stone, which is
+// what makes a stone wall worth the extra work.
+function encloses(i) {
+  const t = tiles[i];
+  return !!(t.bld && BLD[t.bld.kind].encloses);
+}
+
+function recomputeRooms() {
+  rooms = [];
+  const region = new Int32Array(NTILES).fill(-2);      // -2 unvisited, -1 outdoors
+  const stack = [];
+
+  // flood in from every edge tile to mark the outdoors
+  for (let tx = 0; tx < COLS; tx++) {
+    stack.push(idx(tx, 0), idx(tx, ROWS - 1));
+  }
+  for (let ty = 0; ty < ROWS; ty++) {
+    stack.push(idx(0, ty), idx(COLS - 1, ty));
+  }
+  while (stack.length) {
+    const i = stack.pop();
+    if (region[i] !== -2 || encloses(i)) continue;
+    region[i] = -1;
+    const x = txOf(i), y = tyOf(i);
+    if (x > 0) stack.push(idx(x - 1, y));
+    if (x < COLS - 1) stack.push(idx(x + 1, y));
+    if (y > 0) stack.push(idx(x, y - 1));
+    if (y < ROWS - 1) stack.push(idx(x, y + 1));
+  }
+
+  // whatever open space is left forms the enclosed rooms
+  for (let i = 0; i < NTILES; i++) {
+    if (region[i] !== -2 || encloses(i)) continue;
+    const id = rooms.length;
+    const cells = [];
+    stack.push(i);
+    while (stack.length) {
+      const j = stack.pop();
+      if (region[j] !== -2 || encloses(j)) continue;
+      region[j] = id;
+      cells.push(j);
+      const x = txOf(j), y = tyOf(j);
+      if (x > 0) stack.push(idx(x - 1, y));
+      if (x < COLS - 1) stack.push(idx(x + 1, y));
+      if (y > 0) stack.push(idx(x, y - 1));
+      if (y < ROWS - 1) stack.push(idx(x, y + 1));
+    }
+    rooms.push({ cells, insul: 0, beds: 0 });
+  }
+
+  // measure each room's shell and contents
+  for (const r of rooms) {
+    let shell = 0, stone = 0, beds = 0;
+    const counted = new Set();
+    for (const j of r.cells) {
+      const x = txOf(j), y = tyOf(j);
+      const b = tiles[j].bld;
+      if (b && b.kind === "bed") beds++;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!inBounds(x + dx, y + dy)) continue;
+        const k = idx(x + dx, y + dy);
+        if (!encloses(k) || counted.has(k)) continue;
+        counted.add(k);
+        shell++;
+        const kb = tiles[k].bld;
+        if (kb && BLD[kb.kind].stone) stone++;
+      }
+    }
+    r.beds = beds;
+    const frac = shell ? stone / shell : 0;
+    r.insul = lerp(CFG.INDOOR_WARMTH_MIN, CFG.INDOOR_WARMTH_MAX, frac);
+  }
+
+  for (let i = 0; i < NTILES; i++) tiles[i].room = region[i] < 0 ? -1 : region[i];
+  roomsDirty = false;
+}
+
+function dayProgress() { return dayTimer / CFG.DAY_LENGTH; }
+
+// Average temperature for the current day - slides colder as the colony grows.
+function seasonBase(d) {
+  return Math.max(CFG.TEMP_BASE_FLOOR, CFG.TEMP_BASE_START - (d - 1) * CFG.TEMP_BASE_DROP);
+}
+
+// Coldest at dawn, warmest at midday.
+function ambientTemp(p, d) {
+  const prog = p === undefined ? dayProgress() : p;
+  const dd = d === undefined ? day : d;
+  return seasonBase(dd) + CFG.TEMP_DAY_AMP * Math.sin(2 * Math.PI * (prog - 0.25));
+}
+
+function nightLow(d) { return seasonBase(d === undefined ? day : d) - CFG.TEMP_DAY_AMP; }
+
+function fireLit(i) {
+  const b = tiles[i].bld;
+  return !!(b && b.kind === "fire" && b.fuel > 0);
+}
+
+// Temperature where a settler is standing: ambient, plus room insulation, plus
+// the falloff from every lit campfire in range.
+function localTemp(px, py) {
+  let t = ambientTemp();
+  const i = tileAtPx(px, py);
+  if (i >= 0) {
+    const tile = tiles[i];
+    if (tile.room >= 0 && rooms[tile.room]) t += rooms[tile.room].insul;
+  }
+  const ftx = px / TILE, fty = py / TILE;
+  for (const fi of fireIdx) {
+    if (!fireLit(fi)) continue;
+    const d = dist(ftx, fty, txOf(fi) + 0.5, tyOf(fi) + 0.5);
+    if (d < CFG.FIRE_RADIUS) t += CFG.FIRE_HEAT * (1 - d / CFG.FIRE_RADIUS);
+  }
+  return t;
+}
+
+// 0 in daylight, 1 in the dead of night - drives the darkness overlay.
+function nightFactor() {
+  const p = dayProgress();
+  if (p < CFG.DAWN_FADE) return 1 - p / CFG.DAWN_FADE;                // sunrise lifting
+  if (p < CFG.NIGHT_START) return 0;
+  if (p < CFG.NIGHT_START + 0.08) return (p - CFG.NIGHT_START) / 0.08;
+  return 1;                                                           // deep night
+}
+
+function isNight() { return dayProgress() >= CFG.NIGHT_START || dayProgress() < 0.02; }
+
+function clockString() {
+  const mins = Math.floor((dayProgress() * 24 + 6) % 24 * 60);
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return String(h).padStart(2, "0") + ":" + String(Math.floor(m / 10) * 10).padStart(2, "0");
+}
+
+// ===================== JOBS =====================
+// The job list is rebuilt from the state of the world a few times a second
+// rather than mutated from a dozen places - claimed jobs are carried over, so a
+// settler never loses the task in their hands.
+const PRI = { refuel: 90, cook: 80, build: 70, decon: 65, harvest: 60, haul: 50, chop: 40, mine: 40, gather: 40 };
+
+function makeJob(kind, i) {
+  return { kind, i, pri: PRI[kind] || 10, by: 0, prog: 0, cold: 0 };
+}
+
+function jobValid(j) {
+  const t = tiles[j.i];
+  if (!t) return false;
+  switch (j.kind) {
+    case "chop": case "mine": case "gather":
+      // a picked-bare bush normally has nothing to give, but it still has to be
+      // clearable when something is waiting to be built on top of it
+      return !!(t.obj && t.order === j.kind && (t.obj.amount > 0 || t.bp));
+    case "harvest":
+      return !!(t.bld && t.bld.kind === "farm" && t.bld.growth >= 1);
+    case "build":
+      return !!t.bp && !t.obj;
+    case "decon":
+      return !!(t.bld && t.decon);
+    case "haul":
+      return !!(t.pile && t.pile.amount > 0 && stockIdx.length > 0 && !(t.bld && t.bld.kind === "stock"));
+    case "refuel":
+      return !!(t.bld && t.bld.kind === "fire") && t.bld.fuel < CFG.FIRE_REFUEL_AT &&
+             res.wood >= CFG.FIRE_WOOD_PER_REFUEL;
+    case "cook":
+      return fireLit(j.i) && res.food >= CFG.COOK_BATCH && res.meal < CFG.MEAL_STOCK;
+  }
+  return false;
+}
+
+function refreshJobs() {
+  const kept = [];
+  const taken = new Set();
+  for (const j of jobs) {
+    if (j.cold > 0) { j.cold -= CFG.JOB_REFRESH; }
+    if (!jobValid(j)) {
+      if (j.by) releaseJobOf(j.by);
+      continue;
+    }
+    kept.push(j);
+    taken.add(j.kind + ":" + j.i);
+  }
+
+  const add = (kind, i) => {
+    const key = kind + ":" + i;
+    if (taken.has(key)) return;
+    const j = makeJob(kind, i);
+    if (!jobValid(j)) return;
+    taken.add(key);
+    kept.push(j);
+  };
+
+  for (let i = 0; i < NTILES; i++) {
+    const t = tiles[i];
+    if (t.order && t.obj) add(t.order, i);
+    if (t.bp) add("build", i);
+    if (t.bld && t.decon) add("decon", i);
+    if (t.pile) add("haul", i);
+    if (t.bld && t.bld.kind === "farm" && t.bld.growth >= 1) add("harvest", i);
+  }
+  for (const fi of fireIdx) {
+    add("refuel", fi);
+    add("cook", fi);
+  }
+
+  jobs = kept;
+}
+
+function releaseJobOf(id) {
+  const s = settlers.find(x => x.id === id);
+  if (s) { s.job = null; if (s.act === "work") { s.act = null; s.path = null; s.prog = 0; } }
+}
+
+function releaseJob(s) {
+  if (s.job) s.job.by = 0;
+  s.job = null;
+  s.act = null;
+  s.path = null;
+  s.prog = 0;
+}
+
+// Pick the best open job: highest priority band first, nearest within the band.
+function claimJob(s) {
+  const si = settlerTile(s);
+  let best = null, bestScore = -Infinity;
+  for (const j of jobs) {
+    if (j.by || j.cold > 0) continue;
+    if (!jobValid(j)) continue;                       // finished by someone else since the rebuild
+    if (j.kind === "build" && !affordable(BLD[tiles[j.i].bp.kind].cost)) continue;
+    const d = dist(s.x, s.y, cx(j.i), cy(j.i)) / TILE;
+    const score = j.pri * 100 - d;
+    if (score > bestScore) { bestScore = score; best = j; }
+  }
+  if (!best) return false;
+
+  let goal = best.i, path = null;
+  if (walkable(goal)) {
+    path = findPath(si, goal);
+  } else {
+    const r = nearestReachable(s, walkableNeighbours(goal), 4);
+    if (r) { goal = r.i; path = r.path; }
+  }
+  if (!path) {
+    best.cold = CFG.UNREACHABLE_COOLDOWN;   // nobody can get there right now
+    return false;
+  }
+  best.by = s.id;
+  s.job = best;
+  s.act = "work";
+  s.target = goal;
+  s.path = path;
+  s.prog = 0;
+  return true;
+}
+
+function jobWork(kind, i) {
+  switch (kind) {
+    case "chop": case "mine": case "gather": return OBJ[tiles[i].obj.kind].work;
+    case "harvest": return CFG.GATHER_WORK;
+    case "build": return BLD[tiles[i].bp.kind].work;
+    case "decon": return BLD[tiles[i].bld.kind].work * 0.5;
+    case "haul": return CFG.HAUL_PICKUP;
+    case "refuel": return CFG.REFUEL_WORK;
+    case "cook": return CFG.COOK_WORK;
+  }
+  return 1;
+}
+
+// Called once a settler has stood on the job tile long enough.
+function finishJob(s, j) {
+  const t = tiles[j.i];
+  switch (j.kind) {
+    case "chop": case "mine": case "gather": {
+      const o = t.obj;
+      if (!o) break;
+      const def = OBJ[o.kind];
+      dropPile(j.i, def.res, o.amount);
+      t.order = null;
+      // normally berries and reeds are left to grow back, but one in the way of
+      // a blueprint gets pulled out so the building can go up
+      if (def.regrow > 0 && !t.bp) { o.amount = 0; o.regrow = def.regrow; }
+      else { t.obj = null; if (o.kind === "tree") treeCount--; }
+      break;
+    }
+    case "harvest": {
+      dropPile(j.i, "food", CFG.FARM_FOOD);
+      t.bld.growth = 0;
+      break;
+    }
+    case "build": {
+      const kind = t.bp.kind;
+      const cost = BLD[kind].cost;
+      if (!affordable(cost)) return false;        // wait for materials
+      pay(cost);
+      t.bp = null;
+      t.bld = newBuilding(kind);
+      indexDirty = true;
+      roomsDirty = true;        // walls change the shape of a room, beds its contents
+      if (BLD[kind].solid) displaceSettlers(j.i);
+      break;
+    }
+    case "decon": {
+      const kind = t.bld.kind;
+      for (const [k, v] of Object.entries(BLD[kind].cost)) {
+        const back = Math.floor(v * 0.5);
+        if (back > 0) dropPile(j.i, k, back);
+      }
+      if (t.bld.kind === "bed") unclaimBed(j.i);
+      t.bld = null;
+      t.decon = false;
+      indexDirty = true;
+      roomsDirty = true;
+      break;
+    }
+    case "haul": {
+      const p = t.pile;
+      if (!p) break;
+      const take = Math.min(p.amount, CFG.CARRY_MAX);
+      s.carrying = { kind: p.kind, amount: take };
+      p.amount -= take;
+      if (p.amount <= 0) t.pile = null;
+      releaseJob(s);
+      s.act = "deliver";
+      return true;
+    }
+    case "refuel": {
+      if (res.wood < CFG.FIRE_WOOD_PER_REFUEL) return false;
+      res.wood -= CFG.FIRE_WOOD_PER_REFUEL;
+      const wasOut = t.bld.fuel <= 0;
+      t.bld.fuel = Math.min(CFG.FIRE_FUEL_MAX,
+        t.bld.fuel + CFG.FIRE_WOOD_PER_REFUEL * CFG.FIRE_FUEL_PER_WOOD);
+      if (wasOut) addLog(s.name + " relights the campfire.");
+      hudDirty = true;
+      break;
+    }
+    case "cook": {
+      if (res.food < CFG.COOK_BATCH) return false;
+      res.food -= CFG.COOK_BATCH;
+      res.meal += CFG.COOK_YIELD;
+      hudDirty = true;
+      break;
+    }
+  }
+  releaseJob(s);
+  return true;
+}
+
+function dropPile(i, kind, amount) {
+  if (amount <= 0) return;
+  const t = tiles[i];
+  // dropping straight onto a stockpile banks it immediately
+  if (t.bld && t.bld.kind === "stock") { res[kind] += amount; hudDirty = true; return; }
+  if (t.pile && t.pile.kind === kind) t.pile.amount += amount;
+  else if (t.pile) {
+    // a different resource is already here - shove the new pile to a free neighbour
+    const spot = freeNeighbour(i);
+    if (spot >= 0) { dropPile(spot, kind, amount); return; }
+    res[kind] += amount;   // nowhere to put it; count it rather than lose it
+    hudDirty = true;
+  } else t.pile = { kind, amount };
+}
+
+// Nudge anyone standing where a solid building just went up out to open ground.
+function displaceSettlers(i) {
+  for (const s of settlers) {
+    if (settlerTile(s) !== i) continue;
+    const spot = openSpotNear(txOf(i), tyOf(i), 3);
+    if (spot >= 0 && spot !== i) {
+      s.x = cx(spot);
+      s.y = cy(spot);
+    }
+    s.path = null;          // whatever they were walking toward, re-plan it
+  }
+}
+
+function freeNeighbour(i) {
+  const x = txOf(i), y = tyOf(i);
+  for (const [dx, dy] of DIRS.map(d => [d[0], d[1]])) {
+    const nx = x + dx, ny = y + dy;
+    if (!inBounds(nx, ny)) continue;
+    const ni = idx(nx, ny);
+    if (walkable(ni) && !tiles[ni].pile) return ni;
+  }
+  return -1;
+}
+
+function newBuilding(kind) {
+  if (kind === "fire") return { kind, fuel: 0 };
+  if (kind === "farm") return { kind, growth: 0 };
+  if (kind === "bed") return { kind, owner: 0 };
+  return { kind };
+}
+
+// ===================== RESOURCES & BUILDING =====================
+function affordable(cost) {
+  for (const [k, v] of Object.entries(cost)) if (res[k] < v) return false;
+  return true;
+}
+
+function pay(cost) {
+  for (const [k, v] of Object.entries(cost)) res[k] -= v;
+  hudDirty = true;
+}
+
+function costText(cost) {
+  const parts = Object.entries(cost).map(([k, v]) => v + " " + RES_NAMES[k].toLowerCase());
+  return parts.length ? parts.join(", ") : "free";
+}
+
+function canPlace(i, kind) {
+  const t = tiles[i];
+  if (!t) return false;
+  if (t.terrain === "water") return false;
+  const def = BLD[kind];
+  if (def.terrain && !def.terrain.includes(t.terrain)) return false;
+  if (t.bld && t.bld.kind === kind) return false;
+  if (t.bp && t.bp.kind === kind) return false;
+  if (t.bld && (kind === "floor" || kind === "stock")) return false;  // keep the ground clear
+  if (t.bld && BLD[t.bld.kind].solid) return false;
+  return true;
+}
+
+function placeBlueprint(i, kind) {
+  if (!canPlace(i, kind)) return false;
+  const t = tiles[i];
+  t.decon = false;
+  t.bp = { kind, prog: 0 };
+  // a tree or rock in the way becomes a clearing order automatically
+  if (t.obj) t.order = OBJ[t.obj.kind].tool;
+  return true;
+}
+
+// The cancel tool: strip orders and blueprints first, and only tear down a
+// finished building if there was nothing else to undo on the tile.
+function cancelAt(i) {
+  const t = tiles[i];
+  if (t.order) { t.order = null; return true; }
+  if (t.bp) { t.bp = null; return true; }
+  if (t.decon) { t.decon = false; return true; }
+  if (t.bld) { t.decon = true; return true; }
+  return false;
+}
+
+function setOrder(i, kind) {
+  const t = tiles[i];
+  if (!t.obj || t.obj.amount <= 0) return false;
+  if (OBJ[t.obj.kind].tool !== kind) return false;
+  if (t.order === kind) return false;
+  t.order = kind;
+  return true;
+}
+
+// Apply the active tool across a painted rectangle of tiles.
+function applyTool(x0, y0, x1, y1) {
+  const ax = Math.min(x0, x1), bx = Math.max(x0, x1);
+  const ay = Math.min(y0, y1), by = Math.max(y0, y1);
+  let n = 0, blocked = 0;
+  for (let ty = ay; ty <= by; ty++) {
+    for (let tx = ax; tx <= bx; tx++) {
+      if (!inBounds(tx, ty)) continue;
+      const i = idx(tx, ty);
+      if (tool === "cancel") { if (cancelAt(i)) n++; }
+      else if (tool === "chop" || tool === "mine" || tool === "gather") { if (setOrder(i, tool)) n++; }
+      else if (tool.startsWith("bld:")) {
+        const kind = tool.slice(4);
+        if (placeBlueprint(i, kind)) n++;
+        else blocked++;
+      }
+    }
+  }
+  if (n > 0) { jobTimer = CFG.JOB_REFRESH; }   // rebuild the job list promptly
+  if (n === 0 && blocked > 0 && tool.startsWith("bld:")) {
+    const kind = tool.slice(4);
+    const def = BLD[kind];
+    showToast(def.terrain ? def.name + " needs " + def.terrain.join(" or ") + " ground"
+                          : "Can't build there");
+  }
+  return n;
+}
+
+function unclaimBed(i) {
+  for (const s of settlers) if (s.bed === i) s.bed = -1;
+}
+
+// ===================== SETTLERS =====================
+// Returns a path, or null if genuinely unreachable, or undefined when the
+// per-frame search budget is spent and the settler should just try again.
+function tryPath(from, to) {
+  if (from === to) return [];
+  if (pathBudget <= 0) return undefined;
+  pathBudget--;
+  return findPath(from, to);
+}
+
+function goTo(s, i) {
+  const si = settlerTile(s);
+  if (si === i) { s.target = i; s.path = []; return true; }
+  const p = tryPath(si, i);
+  if (p === undefined) return true;      // retry next frame, keep the intent
+  if (p === null) return false;
+  s.target = i;
+  s.path = p;
+  return true;
+}
+
+// Walk along the current path. Returns true once standing on the target.
+function moveAlong(s, dt) {
+  if (!s.path || s.path.length === 0) return true;
+  const spd = CFG.SPEED * s.moveSpeed * tileSpeedMult(settlerTile(s)) * TILE;
+  let budget = spd * dt;
+  while (budget > 0 && s.path.length) {
+    const n = s.path[0];
+    if (!walkable(n)) { s.path = null; return false; }   // something was built across the route
+    const tx = cx(n), ty = cy(n);
+    const d = dist(s.x, s.y, tx, ty);
+    if (d <= budget) {
+      s.x = tx; s.y = ty;
+      budget -= d;
+      s.path.shift();
+    } else {
+      s.x += (tx - s.x) / d * budget;
+      s.y += (ty - s.y) / d * budget;
+      budget = 0;
+    }
+  }
+  return s.path.length === 0;
+}
+
+function updateNeeds(s, dt) {
+  const asleep = s.act === "sleep" && s.path && s.path.length === 0;
+  s.hunger = clamp(s.hunger - CFG.HUNGER_RATE * dt, 0, CFG.NEED_MAX);
+
+  if (asleep) {
+    const inBed = s.bed >= 0 && settlerTile(s) === s.bed;
+    const mult = inBed ? 1 : CFG.GROUND_SLEEP_MULT;
+    s.stamina = clamp(s.stamina + CFG.SLEEP_RECOVER * mult * dt, 0, CFG.NEED_MAX);
+  } else {
+    s.stamina = clamp(s.stamina - CFG.STAMINA_RATE * dt, 0, CFG.NEED_MAX);
+  }
+
+  const t = localTemp(s.x, s.y);
+  const tile = tiles[settlerTile(s)];
+  const indoor = tile.room >= 0;
+  if (t < CFG.COMFORT_TEMP) {
+    const mult = indoor ? CFG.INDOOR_LOSS_MULT : 1;
+    s.warmth = clamp(s.warmth - (CFG.COMFORT_TEMP - t) * CFG.WARMTH_LOSS * mult * dt, 0, CFG.NEED_MAX);
+  } else {
+    s.warmth = clamp(s.warmth + CFG.WARMTH_GAIN * dt, 0, CFG.NEED_MAX);
+  }
+
+  let dmg = 0;
+  if (s.hunger <= 0) dmg += CFG.STARVE_DMG;
+  if (s.warmth <= 0) dmg += CFG.FREEZE_DMG;
+  if (s.stamina <= 0) dmg += CFG.EXHAUST_DMG;
+  if (dmg > 0) s.health = clamp(s.health - dmg * dt, 0, CFG.NEED_MAX);
+  else s.health = clamp(s.health + CFG.HEAL_RATE * dt, 0, CFG.NEED_MAX);
+}
+
+function heatTargets() {
+  const out = [];
+  for (const fi of fireIdx) if (fireLit(fi)) out.push(fi);
+  return out;
+}
+
+function freeBedFor(s) {
+  if (s.bed >= 0) {
+    const b = tiles[s.bed].bld;
+    if (b && b.kind === "bed" && b.owner === s.id) return s.bed;
+    s.bed = -1;
+  }
+  for (const bi of bedIdx) {
+    const b = tiles[bi].bld;
+    if (!b.owner || !settlers.some(o => o.id === b.owner)) {
+      b.owner = s.id;
+      s.bed = bi;
+      return bi;
+    }
+  }
+  return -1;
+}
+
+function foodAvailable() { return res.meal > 0 || res.food > 0; }
+
+// Decide what a settler should be doing. Needs beat work; work beats idling.
+function think(s) {
+  // urgent needs interrupt whatever job is in hand
+  if (s.act === "work" || s.act === "idle" || s.act === null) {
+    if (s.warmth < CFG.URGENT_WARMTH) { releaseJob(s); s.act = "warm"; s.path = null; }
+    else if (s.hunger < CFG.URGENT_HUNGER && foodAvailable()) { releaseJob(s); s.act = "eat"; s.path = null; }
+    else if (s.stamina < CFG.URGENT_STAMINA ||
+             (isNight() && s.stamina < CFG.NIGHT_SLEEP_STAMINA)) { releaseJob(s); s.act = "sleep"; s.path = null; }
+  }
+  // a settler woken by the cold deals with that first
+  if (s.act === "sleep" && s.warmth < 22) { s.act = "warm"; s.path = null; s.prog = 0; }
+
+  if (s.act === null) {
+    if (s.carrying) { s.act = "deliver"; s.path = null; return; }
+    if (s.retry > 0) { s.act = "idle"; s.path = null; return; }
+    if (!claimJob(s)) { s.act = "idle"; s.path = null; }
+  }
+}
+
+function actTick(s, dt) {
+  switch (s.act) {
+    case "work": return tickWork(s, dt);
+    case "deliver": return tickDeliver(s, dt);
+    case "eat": return tickEat(s, dt);
+    case "sleep": return tickSleep(s, dt);
+    case "warm": return tickWarm(s, dt);
+    case "idle": return tickIdle(s, dt);
+  }
+}
+
+function tickWork(s, dt) {
+  const j = s.job;
+  if (!j) { s.act = null; return; }
+  if (!jobValid(j)) { releaseJob(s); return; }
+  if (s.path === null) {
+    if (walkable(j.i)) {
+      if (!goTo(s, j.i)) { j.cold = CFG.UNREACHABLE_COOLDOWN; releaseJob(s); return; }
+    } else {
+      // the tile itself cannot be stood on (tearing down a wall) - work it from
+      // whichever neighbouring tile is easiest to reach
+      const r = nearestReachable(s, walkableNeighbours(j.i), 4);
+      if (!r) { j.cold = CFG.UNREACHABLE_COOLDOWN; releaseJob(s); return; }
+      s.target = r.i;
+      s.path = r.path;
+    }
+  }
+  if (!moveAlong(s, dt)) return;
+  s.prog += CFG.WORK_RATE * s.workSpeed * dt;
+  j.prog = s.prog;
+  if (j.kind === "build" && tiles[j.i].bp) tiles[j.i].bp.prog = s.prog;   // drives the fill bar
+  if (s.prog >= jobWork(j.kind, j.i)) {
+    if (!finishJob(s, j)) { releaseJob(s); }
+  }
+}
+
+function tickDeliver(s, dt) {
+  if (!s.carrying) { s.act = null; return; }
+  if (!stockIdx.length) {
+    dropPile(settlerTile(s), s.carrying.kind, s.carrying.amount);
+    s.carrying = null;
+    s.act = null;
+    return;
+  }
+  if (s.path === null) {
+    const r = nearestReachable(s, stockIdx, 5);
+    if (!r) { s.retry = CFG.UNREACHABLE_COOLDOWN; s.act = "idle"; return; }
+    s.target = r.i;
+    s.path = r.path;
+  }
+  if (!moveAlong(s, dt)) return;
+  res[s.carrying.kind] += s.carrying.amount;
+  s.carrying = null;
+  s.act = null;
+  hudDirty = true;
+}
+
+function tickEat(s, dt) {
+  if (!foodAvailable()) { s.act = null; return; }
+  if (s.path === null) {
+    if (stockIdx.length) {
+      const r = nearestReachable(s, stockIdx, 5);
+      if (!r) { s.retry = CFG.UNREACHABLE_COOLDOWN; s.act = "idle"; return; }
+      s.target = r.i;
+      s.path = r.path;
+    } else { s.path = []; s.target = settlerTile(s); }
+  }
+  if (!moveAlong(s, dt)) return;
+  s.prog += dt;
+  if (s.prog >= CFG.EAT_TIME) {
+    s.prog = 0;
+    if (res.meal > 0) { res.meal--; s.hunger = clamp(s.hunger + CFG.EAT_MEAL, 0, CFG.NEED_MAX); }
+    else if (res.food > 0) { res.food--; s.hunger = clamp(s.hunger + CFG.EAT_RAW, 0, CFG.NEED_MAX); }
+    hudDirty = true;
+    if (s.hunger >= CFG.SATED || !foodAvailable()) s.act = null;
+  }
+}
+
+function tickSleep(s, dt) {
+  if (s.path === null) {
+    const bed = freeBedFor(s);
+    if (bed >= 0 && goTo(s, bed)) { /* heading to bed */ }
+    else { s.path = []; s.target = settlerTile(s); }
+  }
+  if (!moveAlong(s, dt)) return;
+  const done = s.stamina >= 97 || (!isNight() && s.stamina > 86);
+  if (done) { s.act = null; s.path = null; }
+}
+
+function tickWarm(s, dt) {
+  if (s.path === null) {
+    const fires = heatTargets();
+    let r = fires.length ? nearestReachable(s, fires, 4) : null;
+    if (!r) {
+      const indoors = [];
+      for (const room of rooms) for (const i of room.cells) if (walkable(i)) indoors.push(i);
+      r = indoors.length ? nearestReachable(s, indoors, 4) : null;
+    }
+    if (!r) { s.act = "idle"; s.retry = CFG.UNREACHABLE_COOLDOWN; s.path = null; return; } // nowhere warm
+    s.target = r.i;
+    s.path = r.path;
+    s.prog = 0;
+  }
+  if (!moveAlong(s, dt)) return;
+  s.prog += dt;
+  if (s.warmth > 92) { s.act = null; s.path = null; s.prog = 0; return; }
+  // The best spot available still is not warm enough. If there is any heat at
+  // all, huddle on it - drifting away only makes the cold worse. With nothing
+  // to huddle at, go back to work rather than freeze on the spot doing nothing.
+  if (s.prog > 30 && localTemp(s.x, s.y) < CFG.COMFORT_TEMP) {
+    if (s.warmth < 40 && heatTargets().length) { s.prog = 0; return; }
+    s.act = null; s.path = null; s.prog = 0; s.retry = 10;
+  }
+}
+
+function tickIdle(s, dt) {
+  if (s.retry > 0) s.retry -= dt;
+  if (s.path === null || s.path.length === 0) {
+    if (Math.random() < dt * 0.6) {
+      // drift a little: toward a fire after dark, otherwise anywhere nearby
+      const si = settlerTile(s);
+      let goal = -1;
+      if (isNight()) {
+        const fires = heatTargets();
+        if (fires.length) {
+          let near = fires[0];
+          for (const fi of fires) if (dist(s.x, s.y, cx(fi), cy(fi)) < dist(s.x, s.y, cx(near), cy(near))) near = fi;
+          goal = openSpotNear(txOf(near), tyOf(near), 3);
+        }
+      }
+      if (goal < 0) goal = openSpotNear(txOf(si) + randInt(-4, 4), tyOf(si) + randInt(-4, 4), 2);
+      // never let the fallback send an idler marching across the whole map
+      if (goal !== si && dist(txOf(goal), tyOf(goal), txOf(si), tyOf(si)) <= 9) goTo(s, goal);
+    } else if (s.retry <= 0 && Math.random() < dt * 2) {
+      s.act = null;    // take another look for work
+    }
+    return;
+  }
+  moveAlong(s, dt);
+  if (s.path && s.path.length === 0 && s.retry <= 0) s.act = null;
+}
+
+function updateSettlers(dt) {
+  for (let k = settlers.length - 1; k >= 0; k--) {
+    const s = settlers[k];
+    updateNeeds(s, dt);
+    if (s.health <= 0) { killSettler(k); continue; }
+    think(s);
+    actTick(s, dt);
+    s.phase += dt * 6;
+  }
+}
+
+function killSettler(k) {
+  const s = settlers[k];
+  let cause = "exhaustion";
+  if (s.warmth <= 0) cause = "the cold";
+  else if (s.hunger <= 0) cause = "hunger";
+  if (s.carrying) dropPile(settlerTile(s), s.carrying.kind, s.carrying.amount);
+  if (s.bed >= 0 && tiles[s.bed].bld && tiles[s.bed].bld.kind === "bed") tiles[s.bed].bld.owner = 0;
+  releaseJob(s);
+  settlers.splice(k, 1);
+  deaths++;
+  addLog(s.name + " died of " + cause + ".", "bad");
+  if (selection && selection.kind === "settler" && selection.id === s.id) selection = null;
+  hudDirty = true;
+}
+
+// ===================== WORLD TICK =====================
+function updateWorld(dt) {
+  // campfires burn down
+  for (const fi of fireIdx) {
+    const b = tiles[fi].bld;
+    if (b.fuel > 0) {
+      const was = b.fuel;
+      b.fuel = Math.max(0, b.fuel - CFG.FIRE_BURN_RATE * dt);
+      if (was > 0 && b.fuel === 0) addLog("A campfire has burned out.", "bad");
+    }
+  }
+  // crops grow
+  for (const fi of farmIdx) {
+    const b = tiles[fi].bld;
+    if (b.growth < 1) b.growth = Math.min(1, b.growth + dt / CFG.FARM_GROW);
+  }
+  // berries and reeds come back
+  for (let i = 0; i < NTILES; i++) {
+    const o = tiles[i].obj;
+    if (o && o.regrow > 0) {
+      o.regrow -= dt;
+      if (o.regrow <= 0) { o.regrow = 0; o.amount = OBJ[o.kind].amount; }
+    }
+  }
+  // the forest slowly reseeds itself near standing trees
+  sproutTimer += dt;
+  if (sproutTimer >= CFG.TREE_SPROUT_TIME) {
+    sproutTimer = 0;
+    sproutTree();
+  }
+}
+
+function sproutTree() {
+  if (treeCount >= CFG.TREE_CAP) return;
+  for (let guard = 0; guard < 60; guard++) {
+    const i = randInt(0, NTILES - 1);
+    const t = tiles[i];
+    if (t.obj || t.bld || t.bp || t.terrain !== "grass") continue;
+    const x = txOf(i), y = tyOf(i);
+    let neighbours = 0;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const n = at(x + dx, y + dy);
+        if (n && n.obj && n.obj.kind === "tree") neighbours++;
+      }
+    }
+    if (neighbours < 1) continue;
+    t.obj = { kind: "tree", amount: CFG.TREE_WOOD, regrow: 0 };
+    treeCount++;
+    return;
+  }
+}
+
+function endOfDay() {
+  day++;
+  if (settlers.length > 0 && settlers.length < CFG.POP_CAP) {
+    const edge = randInt(0, 3);
+    let tx, ty;
+    if (edge === 0) { tx = randInt(1, COLS - 2); ty = 1; }
+    else if (edge === 1) { tx = randInt(1, COLS - 2); ty = ROWS - 2; }
+    else if (edge === 2) { tx = 1; ty = randInt(1, ROWS - 2); }
+    else { tx = COLS - 2; ty = randInt(1, ROWS - 2); }
+    const i = openSpotNear(tx, ty, 6);
+    const s = makeSettler(i, true);
+    settlers.push(s);
+    peakPop = Math.max(peakPop, settlers.length);
+    addLog(s.name + " walks into camp (day " + day + ").", "good");
+  }
+  const low = Math.round(nightLow());
+  if (low <= CFG.FROST_TEMP) addLog("Day " + day + " dawns. Tonight drops to " + low + "°.");
+  hudDirty = true;
+}
+
+// ===================== MILESTONES =====================
+function makeMilestones() {
+  return [
+    { key: "fire",  name: "First Light",  desc: "Keep a campfire burning",
+      test: () => fireIdx.some(fireLit), done: false },
+    { key: "roof",  name: "Shelter",      desc: "An enclosed room with 3 beds",
+      test: () => rooms.some(r => r.beds >= 3), done: false },
+    { key: "food",  name: "Larder",       desc: "50 food and meals stored",
+      test: () => res.food + res.meal >= 50, done: false },
+    { key: "pop",   name: "Township",     desc: "8 settlers alive at once",
+      test: () => settlers.length >= 8, done: false },
+    { key: "frost", name: "Winter's Edge", desc: "Survive to day 12",
+      test: () => day >= 12, done: false },
+  ];
+}
+
+function checkMilestones() {
+  for (const m of milestones) {
+    if (m.done) continue;
+    let ok = false;
+    try { ok = m.test(); } catch (e) { ok = false; }
+    if (ok) {
+      m.done = true;
+      addLog("Milestone: " + m.name + "!", "good");
+      showToast("Milestone — " + m.name);
+      hudDirty = true;
+    }
+  }
+}
+
+// Tell the player what is actually going wrong, once per problem rather than
+// every tick, so a colony never quietly starves for reasons nobody can see.
+function checkAlerts() {
+  const warn = (key, text) => { if (!alerts[key]) { alerts[key] = true; addLog(text, "bad"); } };
+  const clear = (key) => { alerts[key] = false; };
+
+  if (res.food + res.meal <= 0) warn("food", "The stores are empty \u2014 gather berries or plant farms.");
+  else clear("food");
+
+  if (res.wood <= 0 && fireIdx.length) warn("wood", "No wood left \u2014 the fires will burn out.");
+  else if (res.wood > 4) clear("wood");
+
+  if (!fireIdx.length) warn("nofire", "There is no campfire \u2014 build one before nightfall.");
+  else if (isNight() && !fireIdx.some(fireLit)) warn("dark", "Nothing is burning tonight \u2014 settlers will freeze.");
+  if (fireIdx.length) clear("nofire");
+  if (fireIdx.some(fireLit)) clear("dark");
+
+  if (!stockIdx.length) warn("stock", "No stockpile \u2014 nothing can be stored or eaten.");
+  else clear("stock");
+
+  if (bedIdx.length < settlers.length) warn("beds", "Not enough beds \u2014 sleeping outside costs warmth.");
+  else clear("beds");
+
+  const cold = settlers.filter(x => x.warmth < 25).length;
+  if (cold > 0) warn("cold", cold + (cold === 1 ? " settler is freezing." : " settlers are freezing."));
+  else clear("cold");
+
+  const starving = settlers.filter(x => x.hunger < 15).length;
+  if (starving > 0) warn("starve", starving + (starving === 1 ? " settler is starving." : " settlers are starving."));
+  else clear("starve");
+}
+
+function addLog(text, cls) {
+  log.push({ day, text, cls: cls || "" });
+  if (log.length > CFG.LOG_MAX) log.shift();
+  hudDirty = true;
+}
+
+// ===================== SAVE / LOAD =====================
+const SAVE_KEY = "gather.save.v1";
+
+function serializeTiles() {
+  // only non-default fields travel, which keeps the blob small
+  return tiles.map(t => {
+    const o = { t: t.terrain, s: Math.round(t.shade * 1000) / 1000 };
+    if (t.obj) o.o = [t.obj.kind, t.obj.amount, Math.round(t.obj.regrow * 10) / 10];
+    if (t.bld) o.b = t.bld;
+    if (t.bp) o.p = t.bp;
+    if (t.order) o.r = t.order;
+    if (t.pile) o.l = [t.pile.kind, t.pile.amount];
+    if (t.decon) o.d = 1;
+    return o;
+  });
+}
+
+function saveState() {
+  if (selfTesting) return;
+  try {
+    const data = {
+      v: 1, day, dayTimer, speed, running, res, treeCount, deaths, peakPop,
+      cam: { x: cam.x, y: cam.y, z: cam.z },
+      nextId, nameCursor, sproutTimer,
+      tiles: serializeTiles(),
+      settlers: settlers.map(s => ({
+        id: s.id, name: s.name, hue: s.hue, x: Math.round(s.x * 10) / 10, y: Math.round(s.y * 10) / 10,
+        hunger: s.hunger, stamina: s.stamina, warmth: s.warmth, health: s.health,
+        workSpeed: s.workSpeed, moveSpeed: s.moveSpeed,
+        carrying: s.carrying, bed: s.bed,
+      })),
+      ms: milestones.map(m => (m.done ? 1 : 0)),
+      log: log.slice(-24),
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch (e) { /* storage full or blocked - play on */ }
+}
+
+function loadState() {
+  let raw = null;
+  try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
+  if (!raw) return false;
+  let d;
+  try { d = JSON.parse(raw); } catch (e) { return false; }
+  if (!d || d.v !== 1 || !Array.isArray(d.tiles) || d.tiles.length !== NTILES) return false;
+
+  tiles = d.tiles.map(o => {
+    const t = makeTile(o.t);
+    t.shade = o.s || 0;
+    if (o.o) t.obj = { kind: o.o[0], amount: o.o[1], regrow: o.o[2] };
+    if (o.b) t.bld = o.b;
+    if (o.p) t.bp = o.p;
+    if (o.r) t.order = o.r;
+    if (o.l) t.pile = { kind: o.l[0], amount: o.l[1] };
+    if (o.d) t.decon = true;
+    return t;
+  });
+
+  day = d.day; dayTimer = d.dayTimer; speed = d.speed; running = d.running !== false;
+  res = Object.assign({ wood: 0, stone: 0, fiber: 0, food: 0, meal: 0 }, d.res);
+  deaths = d.deaths || 0;
+  peakPop = d.peakPop || 0;
+  nextId = d.nextId || 1;
+  nameCursor = d.nameCursor || 0;
+  sproutTimer = d.sproutTimer || 0;
+
+  settlers = (d.settlers || []).map(o => {
+    const s = makeSettler(0, false);
+    Object.assign(s, o);
+    s.job = null; s.act = null; s.path = null; s.target = -1; s.prog = 0; s.retry = 0;
+    s.phase = rand(0, Math.PI * 2);
+    return s;
+  });
+
+  if (d.cam) {
+    cam.x = d.cam.x || 0;
+    cam.y = d.cam.y || 0;
+    cam.z = d.cam.z || CFG.ZOOM_MIN;
+  } else resetCam();
+  clampCam();
+
+  jobs = [];
+  alertTimer = 0;
+  alerts = {};
+  log = (d.log || []).slice();
+  milestones = makeMilestones();
+  if (Array.isArray(d.ms)) milestones.forEach((m, k) => { m.done = !!d.ms[k]; });
+  animT = 0;
+  jobTimer = 0; msTimer = 0;
+  selection = null;
+  reindex();
+  recomputeRooms();
+  countTrees();
+  hudDirty = true;
+  return true;
+}
+
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+}
+
+// ===================== CAMERA =====================
+const WORLD_W = COLS * TILE, WORLD_H = ROWS * TILE;
+
+// Keep the zoom in range and the view inside the map.
+function clampCam() {
+  cam.z = clamp(cam.z, CFG.ZOOM_MIN, CFG.ZOOM_MAX);
+  cam.x = clamp(cam.x, 0, Math.max(0, WORLD_W - canvas.width / cam.z));
+  cam.y = clamp(cam.y, 0, Math.max(0, WORLD_H - canvas.height / cam.z));
+}
+
+// Zoom to `z` while holding the world point (wx,wy) under screen point (sx,sy),
+// so the map grows around whatever the cursor is pointing at.
+function zoomTo(z, wx, wy, sx, sy) {
+  cam.z = clamp(z, CFG.ZOOM_MIN, CFG.ZOOM_MAX);
+  cam.x = wx - sx / cam.z;
+  cam.y = wy - sy / cam.z;
+  clampCam();
+}
+
+function resetCam() { cam.z = CFG.ZOOM_MIN; cam.x = 0; cam.y = 0; clampCam(); }
+
+function panCam(dxTiles, dyTiles) {
+  cam.x += dxTiles * TILE;
+  cam.y += dyTiles * TILE;
+  clampCam();
+}
+
+function applyCamTransform(c) {
+  c.setTransform(cam.z, 0, 0, cam.z, -cam.x * cam.z, -cam.y * cam.z);
+}
+
+function updateViewBounds() {
+  vb.x0 = Math.max(0, Math.floor(cam.x / TILE));
+  vb.y0 = Math.max(0, Math.floor(cam.y / TILE));
+  vb.x1 = Math.min(COLS - 1, Math.floor((cam.x + canvas.width / cam.z - 0.001) / TILE));
+  vb.y1 = Math.min(ROWS - 1, Math.floor((cam.y + canvas.height / cam.z - 0.001) / TILE));
+}
+
+// Walk only the tiles on screen. Zoomed in that is a fraction of the map, which
+// is what keeps the per-tile overlays cheap at any zoom.
+function forVisibleTiles(fn) {
+  for (let ty = vb.y0; ty <= vb.y1; ty++) {
+    for (let tx = vb.x0; tx <= vb.x1; tx++) fn(idx(tx, ty), tx * TILE, ty * TILE);
+  }
+}
+
+// Draw chrome in canvas pixels, ignoring the camera.
+function inScreenSpace(fn) {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  fn();
+  ctx.restore();
+}
+
+// ===================== RENDER =====================
+const TERRAIN_COLORS = {
+  grass: ["#2e4330", "#375138"],
+  dirt:  ["#3d352a", "#473c30"],
+  stone: ["#3a3f47", "#434a53"],
+  sand:  ["#4a4435", "#554e3d"],
+  water: ["#1e3a4d", "#24455b"],
+};
+
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  clampCam();
+  updateViewBounds();
+  applyCamTransform(ctx);        // everything below is drawn in world coordinates
+  drawTerrain();
+  drawBuildings();
+  drawObjects();
+  drawPiles();
+  drawOrders();
+  drawSettlers();
+  if (showTemp) drawTempOverlay();
+  if (showRooms) drawRoomOverlay();
+  drawNight();
+  drawPaintPreview();
+  drawSelectionRing();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (cam.z > 1.02) drawZoomHint();
+}
+
+function drawZoomHint() {
+  const text = cam.z.toFixed(1) + "×   middle-drag or arrow keys to pan   ·   0 to fit";
+  ctx.font = "600 12px system-ui, sans-serif";
+  const w = ctx.measureText(text).width + 20;
+  ctx.fillStyle = "rgba(26, 29, 36, 0.82)";
+  ctx.fillRect(canvas.width - w - 10, canvas.height - 34, w, 24);
+  ctx.fillStyle = "rgba(203, 211, 222, 0.95)";
+  ctx.fillText(text, canvas.width - w, canvas.height - 18);
+}
+
+function drawTerrain() {
+  forVisibleTiles((i, px, py) => {
+    const t = tiles[i];
+    const pair = TERRAIN_COLORS[t.terrain] || TERRAIN_COLORS.grass;
+    ctx.fillStyle = t.shade > 0.5 ? pair[1] : pair[0];
+    ctx.fillRect(px, py, TILE, TILE);
+  });
+  // a touch of shoreline so lakes read clearly
+  ctx.strokeStyle = "rgba(120, 180, 220, 0.22)";
+  ctx.lineWidth = 1.5 / cam.z;
+  ctx.beginPath();
+  forVisibleTiles((i, px, py) => {
+    if (tiles[i].terrain !== "water") return;
+    const x = txOf(i), y = tyOf(i);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const n = at(x + dx, y + dy);
+      if (n && n.terrain !== "water") {
+        if (dx === 1) { ctx.moveTo(px + TILE, py); ctx.lineTo(px + TILE, py + TILE); }
+        else if (dx === -1) { ctx.moveTo(px, py); ctx.lineTo(px, py + TILE); }
+        else if (dy === 1) { ctx.moveTo(px, py + TILE); ctx.lineTo(px + TILE, py + TILE); }
+        else { ctx.moveTo(px, py); ctx.lineTo(px + TILE, py); }
+      }
+    }
+  });
+  ctx.stroke();
+}
+
+function drawObjects() {
+  forVisibleTiles((i, px, py) => {
+    const o = tiles[i].obj;
+    if (!o) return;
+    if (o.kind === "tree") drawTree(px, py);
+    else if (o.kind === "rock") drawRock(px, py, tiles[i].shade);
+    else if (o.kind === "berry") drawBerry(px, py, o.amount > 0);
+    else if (o.kind === "reeds") drawReeds(px, py, o.amount > 0);
+  });
+}
+
+function drawTree(px, py) {
+  ctx.fillStyle = "#5a4430";
+  ctx.fillRect(px + TILE / 2 - 1.5, py + TILE * 0.55, 3, TILE * 0.38);
+  ctx.fillStyle = "#3f7a46";
+  ctx.beginPath();
+  ctx.arc(px + TILE / 2, py + TILE * 0.45, TILE * 0.33, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(140, 215, 150, 0.30)";
+  ctx.beginPath();
+  ctx.arc(px + TILE * 0.41, py + TILE * 0.36, TILE * 0.14, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRock(px, py, seed) {
+  ctx.fillStyle = "#7b838f";
+  ctx.beginPath();
+  const cxp = px + TILE / 2, cyp = py + TILE / 2, r = TILE * 0.33;
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + seed * 3;
+    const rr = r * (0.78 + ((k * 7 + Math.floor(seed * 100)) % 10) / 34);
+    const x = cxp + Math.cos(a) * rr, y = cyp + Math.sin(a) * rr;
+    if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  ctx.beginPath();
+  ctx.arc(cxp - r * 0.25, cyp - r * 0.3, r * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBerry(px, py, ripe) {
+  ctx.fillStyle = "#3c5f3d";
+  ctx.beginPath();
+  ctx.arc(px + TILE / 2, py + TILE * 0.58, TILE * 0.28, 0, Math.PI * 2);
+  ctx.fill();
+  if (!ripe) return;
+  ctx.fillStyle = "#d4596b";
+  for (const [ox, oy] of [[-0.12, -0.05], [0.10, 0.02], [0.0, 0.14]]) {
+    ctx.beginPath();
+    ctx.arc(px + TILE / 2 + ox * TILE, py + TILE * 0.56 + oy * TILE, TILE * 0.075, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawReeds(px, py, grown) {
+  ctx.strokeStyle = grown ? "#9fc78a" : "#5f7355";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let k = 0; k < 4; k++) {
+    const bx = px + TILE * (0.26 + k * 0.16);
+    const h = TILE * (grown ? 0.5 : 0.26) * (0.8 + (k % 2) * 0.3);
+    ctx.moveTo(bx, py + TILE * 0.86);
+    ctx.lineTo(bx + (k % 2 ? 2 : -2), py + TILE * 0.86 - h);
+  }
+  ctx.stroke();
+}
+
+function drawBuildings() {
+  forVisibleTiles((i, px, py) => {
+    const t = tiles[i];
+    if (t.bld) drawBuilding(t.bld, px, py, i);
+    if (t.bp) drawBlueprint(t.bp, px, py);
+    if (t.decon) {
+      ctx.strokeStyle = "rgba(232, 119, 90, 0.85)";
+      ctx.lineWidth = 2 / cam.z;
+      ctx.beginPath();
+      ctx.moveTo(px + 4, py + 4); ctx.lineTo(px + TILE - 4, py + TILE - 4);
+      ctx.moveTo(px + TILE - 4, py + 4); ctx.lineTo(px + 4, py + TILE - 4);
+      ctx.stroke();
+    }
+  });
+}
+
+function drawBuilding(b, px, py, i) {
+  switch (b.kind) {
+    case "wall":
+      ctx.fillStyle = "#6b5338";
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+      ctx.fillStyle = "rgba(255,255,255,0.07)";
+      ctx.fillRect(px + 2, py + 2, TILE - 4, 3);
+      break;
+    case "swall":
+      ctx.fillStyle = "#6e757f";
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.strokeStyle = "rgba(0,0,0,0.32)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+      ctx.strokeStyle = "rgba(0,0,0,0.18)";
+      ctx.beginPath();
+      ctx.moveTo(px, py + TILE / 2); ctx.lineTo(px + TILE, py + TILE / 2);
+      ctx.moveTo(px + TILE / 2, py); ctx.lineTo(px + TILE / 2, py + TILE / 2);
+      ctx.stroke();
+      break;
+    case "door":
+      ctx.fillStyle = "#4a3b2a";
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.fillStyle = "#a07b4e";
+      ctx.fillRect(px + 3, py + 2, TILE - 6, TILE - 4);
+      ctx.fillStyle = "#4a3b2a";
+      ctx.beginPath();
+      ctx.arc(px + TILE - 7, py + TILE / 2, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case "floor":
+      ctx.fillStyle = "#564634";
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.strokeStyle = "rgba(0,0,0,0.22)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+      break;
+    case "stock":
+      ctx.fillStyle = "rgba(159, 230, 176, 0.07)";
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.strokeStyle = "rgba(159, 230, 176, 0.45)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
+      ctx.setLineDash([]);
+      break;
+    case "bed": {
+      ctx.fillStyle = "#4b3c2d";
+      ctx.fillRect(px + 2, py + 3, TILE - 4, TILE - 6);
+      ctx.fillStyle = "#c9c2b4";
+      ctx.fillRect(px + 3, py + 4, TILE - 6, TILE * 0.34);
+      ctx.fillStyle = "#7d6a93";
+      ctx.fillRect(px + 3, py + 4 + TILE * 0.34, TILE - 6, TILE * 0.38);
+      break;
+    }
+    case "farm": {
+      ctx.fillStyle = "#4a3a27";
+      ctx.fillRect(px, py, TILE, TILE);
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let k = 1; k < 3; k++) { ctx.moveTo(px, py + k * TILE / 3); ctx.lineTo(px + TILE, py + k * TILE / 3); }
+      ctx.stroke();
+      const g = b.growth || 0;
+      if (g > 0.03) {
+        const h = TILE * 0.5 * Math.min(1, g);
+        ctx.strokeStyle = g >= 1 ? "#e2b04a" : "#6fa35c";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let k = 0; k < 3; k++) {
+          const bx = px + TILE * (0.3 + k * 0.2);
+          ctx.moveTo(bx, py + TILE * 0.82);
+          ctx.lineTo(bx, py + TILE * 0.82 - h);
+        }
+        ctx.stroke();
+        if (g >= 1) {
+          ctx.fillStyle = "#e2b04a";
+          for (let k = 0; k < 3; k++) {
+            ctx.beginPath();
+            ctx.arc(px + TILE * (0.3 + k * 0.2), py + TILE * 0.82 - h, 2.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+      break;
+    }
+    case "fire": {
+      const lit = b.fuel > 0;
+      ctx.fillStyle = "#3a3127";
+      ctx.beginPath();
+      ctx.arc(px + TILE / 2, py + TILE / 2, TILE * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#6b5338";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(px + 5, py + TILE - 6); ctx.lineTo(px + TILE - 5, py + 7);
+      ctx.moveTo(px + TILE - 5, py + TILE - 6); ctx.lineTo(px + 5, py + 7);
+      ctx.stroke();
+      if (lit) {
+        const flick = 0.78 + 0.22 * Math.sin(animT * 9 + i);
+        ctx.fillStyle = "#e8773a";
+        ctx.beginPath();
+        ctx.ellipse(px + TILE / 2, py + TILE * 0.46, TILE * 0.17 * flick, TILE * 0.3 * flick, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#f6d06a";
+        ctx.beginPath();
+        ctx.ellipse(px + TILE / 2, py + TILE * 0.5, TILE * 0.08 * flick, TILE * 0.16 * flick, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // fuel ring
+      const frac = clamp((b.fuel || 0) / CFG.FIRE_FUEL_MAX, 0, 1);
+      ctx.strokeStyle = frac > 0.3 ? "rgba(232, 180, 90, 0.75)" : "rgba(232, 119, 90, 0.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px + TILE / 2, py + TILE / 2, TILE * 0.46, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+  }
+}
+
+function drawBlueprint(bp, px, py) {
+  const def = BLD[bp.kind];
+  ctx.fillStyle = "rgba(108, 178, 235, 0.16)";
+  ctx.fillRect(px, py, TILE, TILE);
+  ctx.strokeStyle = affordable(def.cost) ? "rgba(108, 178, 235, 0.9)" : "rgba(232, 119, 90, 0.8)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
+  ctx.setLineDash([]);
+  const total = def.work || 1;
+  const frac = clamp((bp.prog || 0) / total, 0, 1);
+  if (frac > 0) {
+    ctx.fillStyle = "rgba(108, 178, 235, 0.45)";
+    ctx.fillRect(px + 1, py + TILE - 1 - (TILE - 2) * frac, TILE - 2, (TILE - 2) * frac);
+  }
+}
+
+function drawPiles() {
+  forVisibleTiles((i, px, py) => {
+    const p = tiles[i].pile;
+    if (!p) return;
+    const n = Math.min(4, Math.max(1, Math.ceil(p.amount / 2)));
+    ctx.fillStyle = RES_COLOR[p.kind] || "#cbd3de";
+    for (let k = 0; k < n; k++) {
+      const ox = (k % 2) * 6 - 3, oy = Math.floor(k / 2) * 6 - 3;
+      ctx.fillRect(px + TILE / 2 - 3 + ox, py + TILE / 2 - 3 + oy, 5, 5);
+    }
+    ctx.strokeStyle = "rgba(0,0,0,0.45)";
+    ctx.lineWidth = 1 / cam.z;
+    ctx.strokeRect(px + TILE / 2 - 3.5 + (n > 1 ? -3 : 0), py + TILE / 2 - 3.5 + (n > 2 ? -3 : 0), 6, 6);
+  });
+}
+
+const ORDER_COLOR = { chop: "rgba(159, 230, 176, 0.30)", mine: "rgba(169, 178, 191, 0.32)", gather: "rgba(226, 176, 74, 0.30)" };
+
+function drawOrders() {
+  forVisibleTiles((i, px, py) => {
+    const o = tiles[i].order;
+    if (!o) return;
+    ctx.fillStyle = ORDER_COLOR[o];
+    ctx.fillRect(px, py, TILE, TILE);
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    ctx.lineWidth = 1 / cam.z;
+    ctx.beginPath();
+    if (o === "chop") {       // an axe stroke
+      ctx.moveTo(px + 5, py + TILE - 5); ctx.lineTo(px + TILE - 6, py + 6);
+      ctx.moveTo(px + TILE - 9, py + 5); ctx.lineTo(px + TILE - 4, py + 10);
+    } else if (o === "mine") { // a pick stroke
+      ctx.moveTo(px + 5, py + 7); ctx.lineTo(px + TILE - 5, py + 7);
+      ctx.moveTo(px + TILE / 2, py + 7); ctx.lineTo(px + TILE / 2, py + TILE - 5);
+    } else {                   // a gathering basket
+      ctx.moveTo(px + 5, py + 9); ctx.lineTo(px + TILE - 5, py + 9);
+      ctx.moveTo(px + 7, py + 9); ctx.lineTo(px + 9, py + TILE - 6);
+      ctx.lineTo(px + TILE - 9, py + TILE - 6); ctx.lineTo(px + TILE - 7, py + 9);
+    }
+    ctx.stroke();
+  });
+}
+
+function drawSettlers() {
+  for (const s of settlers) {
+    const asleep = s.act === "sleep" && s.path && s.path.length === 0;
+    const r = TILE * 0.3;
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y + r * 0.8, r * 0.85, r * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // body
+    const bob = asleep ? 0 : Math.sin(s.phase) * 0.8;
+    ctx.fillStyle = "hsl(" + s.hue.toFixed(0) + ", 42%, 56%)";
+    ctx.beginPath();
+    ctx.arc(s.x, s.y + bob, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(10,12,16,0.55)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    // head
+    ctx.fillStyle = "hsl(" + s.hue.toFixed(0) + ", 38%, 78%)";
+    ctx.beginPath();
+    ctx.arc(s.x, s.y + bob - r * 0.62, r * 0.52, 0, Math.PI * 2);
+    ctx.fill();
+    // carried resource
+    if (s.carrying) {
+      ctx.fillStyle = RES_COLOR[s.carrying.kind] || "#cbd3de";
+      ctx.fillRect(s.x + r * 0.7, s.y + bob - r * 0.3, 6, 6);
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(s.x + r * 0.7, s.y + bob - r * 0.3, 6, 6);
+    }
+    if (asleep) drawZ(s.x + r * 0.9, s.y - r * 1.3);
+    // warning bars for whichever need is in trouble
+    let bar = 0;
+    if (s.warmth < 60) bar = drawNeedBar(s, bar, s.warmth, "#6cb2eb");
+    if (s.hunger < 45) bar = drawNeedBar(s, bar, s.hunger, "#e2b04a");
+    if (s.stamina < 30) bar = drawNeedBar(s, bar, s.stamina, "#b58ee0");
+    if (s.health < 85) bar = drawNeedBar(s, bar, s.health, "#e8775a");
+  }
+}
+
+function drawNeedBar(s, slot, value, color) {
+  const w = TILE * 0.8, h = 2.6;
+  const x = s.x - w / 2, y = s.y - TILE * 0.62 - slot * (h + 1.6);
+  ctx.fillStyle = "rgba(10,12,16,0.65)";
+  ctx.fillRect(x - 0.5, y - 0.5, w + 1, h + 1);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w * clamp(value / CFG.NEED_MAX, 0, 1), h);
+  return slot + 1;
+}
+
+function drawZ(x, y) {
+  ctx.fillStyle = "rgba(232, 236, 241, 0.85)";
+  ctx.font = "bold 10px system-ui, sans-serif";
+  const f = (animT * 1.3) % 1;
+  ctx.globalAlpha = 1 - f;
+  ctx.fillText("z", x + f * 4, y - f * 7);
+  ctx.globalAlpha = 1;
+}
+
+// Darkness at night, with the light of every burning campfire punched out of it.
+function drawNight() {
+  const n = nightFactor();
+  if (n <= 0.02) return;
+  const W = canvas.width, H = canvas.height;
+  if (lightCanvas.width !== W) { lightCanvas.width = W; lightCanvas.height = H; }
+  lctx.setTransform(1, 0, 0, 1, 0, 0);
+  lctx.globalCompositeOperation = "source-over";
+  lctx.clearRect(0, 0, W, H);
+  lctx.fillStyle = "rgba(8, 11, 24, " + (0.76 * n).toFixed(3) + ")";
+  lctx.fillRect(0, 0, W, H);
+  // the pools of firelight are punched out in world coordinates, so they stay
+  // over the right tiles however far the view is zoomed in
+  lctx.globalCompositeOperation = "destination-out";
+  applyCamTransform(lctx);
+  for (const fi of fireIdx) {
+    if (!fireLit(fi)) continue;
+    const flick = 0.92 + 0.08 * Math.sin(animT * 7 + fi);
+    const r = CFG.FIRE_LIGHT * TILE * flick;
+    const g = lctx.createRadialGradient(cx(fi), cy(fi), TILE * 0.4, cx(fi), cy(fi), r);
+    g.addColorStop(0, "rgba(0,0,0,1)");
+    g.addColorStop(0.45, "rgba(0,0,0,0.72)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    lctx.fillStyle = g;
+    lctx.beginPath();
+    lctx.arc(cx(fi), cy(fi), r, 0, Math.PI * 2);
+    lctx.fill();
+  }
+  lctx.setTransform(1, 0, 0, 1, 0, 0);
+  lctx.globalCompositeOperation = "source-over";
+  inScreenSpace(() => ctx.drawImage(lightCanvas, 0, 0));
+
+  // warm glow on top so firelight actually looks warm
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const fi of fireIdx) {
+    if (!fireLit(fi)) continue;
+    const r = CFG.FIRE_LIGHT * TILE * 0.8;
+    const g = ctx.createRadialGradient(cx(fi), cy(fi), 0, cx(fi), cy(fi), r);
+    g.addColorStop(0, "rgba(255, 170, 80, " + (0.30 * n).toFixed(3) + ")");
+    g.addColorStop(1, "rgba(255, 140, 60, 0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx(fi), cy(fi), r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTempOverlay() {
+  forVisibleTiles((i, px, py) => {
+    const t = localTemp(cx(i), cy(i));
+    const f = clamp((t + 20) / 55, 0, 1);      // -20C .. +35C
+    const r = Math.round(lerp(60, 240, f));
+    const g = Math.round(lerp(120, 130, 1 - Math.abs(f - 0.5) * 2));
+    const b = Math.round(lerp(240, 60, f));
+    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + ",0.42)";
+    ctx.fillRect(px, py, TILE, TILE);
+  });
+  inScreenSpace(() => {
+    ctx.fillStyle = "rgba(232,236,241,0.9)";
+    ctx.font = "600 12px system-ui, sans-serif";
+    ctx.fillText("Temperature — blue is deadly cold, orange is comfortable", 10, canvas.height - 12);
+  });
+}
+
+function drawRoomOverlay() {
+  forVisibleTiles((i, px, py) => {
+    const t = tiles[i];
+    if (t.room < 0 || !rooms[t.room]) return;
+    const r = rooms[t.room];
+    const f = clamp((r.insul - CFG.INDOOR_WARMTH_MIN) /
+                    (CFG.INDOOR_WARMTH_MAX - CFG.INDOOR_WARMTH_MIN), 0, 1);
+    ctx.fillStyle = "rgba(" + Math.round(lerp(159, 108, f)) + ", 230, " + Math.round(lerp(176, 235, f)) + ", 0.26)";
+    ctx.fillRect(px, py, TILE, TILE);
+  });
+  inScreenSpace(() => {
+    ctx.fillStyle = "rgba(232,236,241,0.9)";
+    ctx.font = "600 12px system-ui, sans-serif";
+    ctx.fillText("Enclosed rooms — stone walls hold in more heat", 10, canvas.height - 12);
+  });
+}
+
+function drawPaintPreview() {
+  if (drag) {
+    const ax = Math.min(drag.x0, drag.x1), bx = Math.max(drag.x0, drag.x1);
+    const ay = Math.min(drag.y0, drag.y1), by = Math.max(drag.y0, drag.y1);
+    ctx.strokeStyle = tool === "cancel" ? "rgba(232, 119, 90, 0.95)" : "rgba(159, 230, 176, 0.95)";
+    ctx.lineWidth = 2 / cam.z;
+    ctx.setLineDash([5 / cam.z, 4 / cam.z]);
+    ctx.strokeRect(ax * TILE + 1, ay * TILE + 1, (bx - ax + 1) * TILE - 2, (by - ay + 1) * TILE - 2);
+    ctx.setLineDash([]);
+  } else if (hover.tx >= 0 && tool !== "info") {
+    ctx.strokeStyle = "rgba(232, 236, 241, 0.5)";
+    ctx.lineWidth = 1.5 / cam.z;
+    ctx.strokeRect(hover.tx * TILE + 1, hover.ty * TILE + 1, TILE - 2, TILE - 2);
+  }
+}
+
+function drawSelectionRing() {
+  if (!selection) return;
+  if (selection.kind === "settler") {
+    const s = settlers.find(x => x.id === selection.id);
+    if (!s) return;
+    ctx.strokeStyle = "#9fe6b0";
+    ctx.lineWidth = 2 / cam.z;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, TILE * 0.52, 0, Math.PI * 2);
+    ctx.stroke();
+    if (s.path && s.path.length) {
+      ctx.strokeStyle = "rgba(159, 230, 176, 0.45)";
+      ctx.lineWidth = 1.5 / cam.z;
+      ctx.setLineDash([3 / cam.z, 3 / cam.z]);
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      for (const i of s.path) ctx.lineTo(cx(i), cy(i));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  } else {
+    const i = selection.i;
+    ctx.strokeStyle = "#9fe6b0";
+    ctx.lineWidth = 2 / cam.z;
+    ctx.strokeRect(txOf(i) * TILE + 1, tyOf(i) * TILE + 1, TILE - 2, TILE - 2);
+  }
+}
+
+// ===================== HUD =====================
+const TOOLS = [
+  { id: "info",   label: "Info",      hot: "1", group: "work",
+    tip: "Click a settler or a tile to inspect it.<br>Scroll to zoom \u00b7 middle-drag or arrow keys to pan \u00b7 <b>0</b> to fit the map." },
+  { id: "chop",   label: "Chop",      hot: "2", group: "work", tip: "Drag over trees to order them felled for <b>wood</b>." },
+  { id: "mine",   label: "Mine",      hot: "3", group: "work", tip: "Drag over rock outcrops to order them broken for <b>stone</b>." },
+  { id: "gather", label: "Gather",    hot: "4", group: "work", tip: "Drag over berry bushes for <b>food</b> and reeds for <b>fiber</b>." },
+  { id: "cancel", label: "Cancel",    hot: "5", group: "work", tip: "Clears orders and blueprints. On a finished building, marks it for tear-down (half materials back)." },
+
+  { id: "bld:wall",  label: "Wall",       hot: "W", group: "build" },
+  { id: "bld:swall", label: "Stone Wall", hot: "S", group: "build" },
+  { id: "bld:door",  label: "Door",       hot: "D", group: "build" },
+  { id: "bld:floor", label: "Floor",      hot: "F", group: "build" },
+  { id: "bld:bed",   label: "Bed",        hot: "B", group: "build" },
+  { id: "bld:fire",  label: "Campfire",   hot: "C", group: "build" },
+  { id: "bld:farm",  label: "Farm",       hot: "P", group: "build" },
+  { id: "bld:stock", label: "Stockpile",  hot: "K", group: "build" },
+];
+
+const TOOL_TIPS = {
+  "bld:wall":  "Blocks movement and <b>encloses rooms</b>. An enclosed room holds in heat.",
+  "bld:swall": "Like a wall, but a stone shell holds in far more heat than wood.",
+  "bld:door":  "Walkable, and still counts as a room wall. Every shelter needs one.",
+  "bld:floor": "Paving speeds settlers up as they cross it.",
+  "bld:bed":   "A settler sleeps far better in a claimed bed than on the ground.",
+  "bld:fire":  "Warmth, light and cooking. Burns wood — settlers keep it fed.",
+  "bld:farm":  "Grows food over about a day and a half. Needs dirt or grass.",
+  "bld:stock": "Resources only count once hauled here. Settlers eat from it too.",
+};
+
+function buildPalette() {
+  const work = document.getElementById("toolsWork");
+  const build = document.getElementById("toolsBuild");
+  const view = document.getElementById("toolsView");
+  for (const t of TOOLS) {
+    const b = document.createElement("button");
+    b.dataset.tool = t.id;
+    b.innerHTML = '<span class="hot">' + t.hot + "</span>" + t.label;
+    b.addEventListener("click", () => setTool(t.id));
+    (t.group === "work" ? work : build).appendChild(b);
+  }
+  const mk = (label, hot, onClick, id) => {
+    const b = document.createElement("button");
+    b.id = id;
+    b.innerHTML = '<span class="hot">' + hot + "</span>" + label;
+    b.addEventListener("click", onClick);
+    view.appendChild(b);
+    return b;
+  };
+  mk("Temperature", "T", () => { showTemp = !showTemp; showRooms = false; syncPalette(); }, "btnTemp");
+  mk("Rooms", "R", () => { showRooms = !showRooms; showTemp = false; syncPalette(); }, "btnRooms");
+  syncPalette();
+}
+
+function setTool(id) {
+  tool = id;
+  if (id !== "info") selection = null;
+  syncPalette();
+}
+
+function syncPalette() {
+  document.querySelectorAll("[data-tool]").forEach(b => {
+    const id = b.dataset.tool;
+    b.classList.toggle("active", id === tool);
+    if (id.startsWith("bld:")) {
+      b.classList.toggle("poor", !affordable(BLD[id.slice(4)].cost));
+    }
+  });
+  const bt = document.getElementById("btnTemp"), br = document.getElementById("btnRooms");
+  if (bt) bt.classList.toggle("active", showTemp);
+  if (br) br.classList.toggle("active", showRooms);
+
+  const tip = document.getElementById("tip");
+  if (tool.startsWith("bld:")) {
+    const kind = tool.slice(4);
+    tip.innerHTML = "<b>" + BLD[kind].name + "</b> — " + costText(BLD[kind].cost) + ".<br>" +
+                    (TOOL_TIPS[tool] || "");
+  } else {
+    const t = TOOLS.find(x => x.id === tool);
+    tip.innerHTML = t ? t.tip : "";
+  }
+}
+
+function setStat(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.querySelector(".value").textContent = value;
+}
+
+function updateHUD() {
+  setStat("dayStat", day);
+  setStat("clockStat", clockString());
+  const temp = Math.round(ambientTemp());
+  const low = Math.round(nightLow());
+  setStat("tempStat", temp + "°" + (!isNight() && low <= CFG.FROST_TEMP ? " (frost " + low + "°)" : ""));
+  setStat("popStat", settlers.length);
+  setStat("woodStat", Math.floor(res.wood));
+  setStat("stoneStat", Math.floor(res.stone));
+  setStat("fiberStat", Math.floor(res.fiber));
+  setStat("foodStat", Math.floor(res.food));
+  setStat("mealStat", Math.floor(res.meal));
+  updateSelectionPanel();
+  if (hudDirty) {
+    updateMilestonePanel();
+    updateLogPanel();
+    syncPalette();
+    hudDirty = false;
+  }
+}
+
+function needRow(label, value, color) {
+  return '<div class="needrow"><span class="nl">' + label + '</span>' +
+         '<span class="bar"><i style="width:' + clamp(value, 0, 100).toFixed(0) + '%;background:' + color + '"></i></span>' +
+         '<span class="nv">' + Math.round(value) + "</span></div>";
+}
+
+function actLabel(s) {
+  if (!s.act || s.act === "idle") return "looking for work";
+  if (s.act === "sleep") return (s.path && s.path.length === 0) ? "asleep" : "heading to bed";
+  if (s.act === "eat") return (s.path && s.path.length === 0) ? "eating" : "going to eat";
+  if (s.act === "warm") return (s.path && s.path.length === 0) ? "warming up" : "looking for heat";
+  if (s.act === "deliver") return s.carrying ? "hauling " + s.carrying.kind + " to a stockpile" : "hauling";
+  if (s.act === "work" && s.job) {
+    const j = s.job;
+    const names = { chop: "felling a tree", mine: "breaking rock", gather: "gathering",
+                    harvest: "harvesting a plot", build: "building " + (tiles[j.i].bp ? BLD[tiles[j.i].bp.kind].name.toLowerCase() : "something"),
+                    decon: "tearing down", haul: "picking up a pile", refuel: "feeding the fire", cook: "cooking" };
+    const label = names[j.kind] || j.kind;
+    if (s.path && s.path.length) return "walking to " + label;
+    const total = jobWork(j.kind, j.i);
+    return label + " (" + Math.min(99, Math.round(s.prog / total * 100)) + "%)";
+  }
+  return s.act;
+}
+
+function updateSelectionPanel() {
+  const el = document.getElementById("selBody");
+  if (!selection) {
+    el.innerHTML = '<span class="sub">Nothing selected. With the Info tool, click a settler or any tile.</span>';
+    return;
+  }
+  if (selection.kind === "settler") {
+    const s = settlers.find(x => x.id === selection.id);
+    if (!s) { selection = null; return; }
+    const t = Math.round(localTemp(s.x, s.y));
+    el.innerHTML =
+      '<div class="nm">' + s.name + '</div>' +
+      '<div class="sub">' + actLabel(s) + '</div>' +
+      needRow("Food", s.hunger, "#e2b04a") +
+      needRow("Rest", s.stamina, "#b58ee0") +
+      needRow("Warmth", s.warmth, "#6cb2eb") +
+      needRow("Health", s.health, "#e8775a") +
+      '<div class="sub" style="margin-top:6px">Standing in ' + t + '°' +
+      (tiles[settlerTile(s)].room >= 0 ? " (indoors)" : " (outdoors)") + '</div>' +
+      '<div class="sub">' + (s.bed >= 0 ? "Has a bed" : "No bed yet") +
+      (s.carrying ? " · carrying " + s.carrying.amount + " " + s.carrying.kind : "") + '</div>';
+    return;
+  }
+
+  const i = selection.i;
+  const t = tiles[i];
+  const bits = [];
+  bits.push('<div class="nm">' + (t.bld ? BLD[t.bld.kind].name : t.obj ? OBJ[t.obj.kind].name : t.terrain[0].toUpperCase() + t.terrain.slice(1)) + '</div>');
+  bits.push('<div class="sub">' + txOf(i) + ", " + tyOf(i) + " · " + Math.round(localTemp(cx(i), cy(i))) + '° · ' +
+            (t.room >= 0 ? "indoors, holds +" + rooms[t.room].insul.toFixed(0) + "°" : "outdoors") + '</div>');
+  if (t.bld && t.bld.kind === "fire") {
+    bits.push(needRow("Fuel", (t.bld.fuel / CFG.FIRE_FUEL_MAX) * 100, "#e8773a"));
+    if (t.bld.fuel <= 0) bits.push('<div class="sub">Out of fuel — needs wood in a stockpile.</div>');
+  }
+  if (t.bld && t.bld.kind === "farm") {
+    bits.push(needRow("Growth", (t.bld.growth || 0) * 100, "#6fa35c"));
+  }
+  if (t.bld && t.bld.kind === "bed") {
+    const owner = settlers.find(x => x.id === t.bld.owner);
+    bits.push('<div class="sub">' + (owner ? owner.name + "'s bed" : "Unclaimed bed") + '</div>');
+  }
+  if (t.obj) {
+    bits.push('<div class="sub">' + (t.obj.amount > 0
+      ? "Yields " + t.obj.amount + " " + OBJ[t.obj.kind].res
+      : "Regrowing — " + Math.ceil(t.obj.regrow) + "s") + '</div>');
+  }
+  if (t.bp) bits.push('<div class="sub">Blueprint: ' + BLD[t.bp.kind].name + " (" + costText(BLD[t.bp.kind].cost) + ")</div>");
+  if (t.pile) bits.push('<div class="sub">Loose pile: ' + t.pile.amount + " " + t.pile.kind + "</div>");
+  if (t.order) bits.push('<div class="sub">Ordered: ' + t.order + "</div>");
+  if (t.decon) bits.push('<div class="sub">Marked for tear-down</div>');
+  el.innerHTML = bits.join("");
+}
+
+function updateMilestonePanel() {
+  document.getElementById("msBody").innerHTML = milestones.map(m =>
+    '<div class="ms' + (m.done ? " done" : "") + '"><span class="tick">' +
+    (m.done ? "✓" : "○") + '</span><span>' + m.name +
+    '<span class="md">' + m.desc + "</span></span></div>").join("");
+}
+
+function updateLogPanel() {
+  const el = document.getElementById("logBody");
+  el.innerHTML = log.slice(-18).map(l =>
+    '<div class="' + l.cls + '"><span class="d">d' + l.day + "</span>" + l.text + "</div>").join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+let toastTimer = null;
+function showToast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+}
+
+function showOverlay() {
+  document.getElementById("ovSummary").textContent =
+    "You lasted " + day + (day === 1 ? " day." : " days.");
+  document.getElementById("ovDetail").innerHTML =
+    "Peak population " + peakPop + " · " + deaths + (deaths === 1 ? " death" : " deaths") + "<br>" +
+    milestones.filter(m => m.done).length + " of " + milestones.length + " milestones earned";
+  document.getElementById("overlay").classList.add("show");
+}
+
+function hideOverlay() { document.getElementById("overlay").classList.remove("show"); }
+
+// ===================== INPUT =====================
+// Where the pointer is in canvas pixels (the canvas is CSS-scaled to fit).
+function canvasPoint(ev) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    sx: (ev.clientX - r.left) * (canvas.width / r.width),
+    sy: (ev.clientY - r.top) * (canvas.height / r.height),
+  };
+}
+
+// ...and the world point and tile that sits under it at the current zoom.
+function canvasTile(ev) {
+  const s = canvasPoint(ev);
+  const px = s.sx / cam.z + cam.x;
+  const py = s.sy / cam.z + cam.y;
+  return { sx: s.sx, sy: s.sy, px, py, tx: Math.floor(px / TILE), ty: Math.floor(py / TILE) };
+}
+
+// Mouse wheel zooms around the cursor.
+canvas.addEventListener("wheel", (ev) => {
+  ev.preventDefault();
+  const p = canvasTile(ev);
+  const unit = ev.deltaMode === 1 ? 16 : (ev.deltaMode === 2 ? 400 : 1);   // lines / pages / pixels
+  zoomTo(cam.z * Math.exp(-ev.deltaY * unit * CFG.ZOOM_WHEEL), p.px, p.py, p.sx, p.sy);
+}, { passive: false });
+
+canvas.addEventListener("pointerdown", (ev) => {
+  if (ev.button === 1) {                       // middle button drags the view
+    ev.preventDefault();
+    const s = canvasPoint(ev);
+    pan = { sx: s.sx, sy: s.sy, camx: cam.x, camy: cam.y };
+    canvas.setPointerCapture(ev.pointerId);
+    return;
+  }
+  const p = canvasTile(ev);
+  if (!inBounds(p.tx, p.ty)) return;
+  canvas.setPointerCapture(ev.pointerId);
+  if (tool === "info") {
+    let best = null, bestD = TILE * 0.9 / cam.z;   // same click slack on screen at any zoom
+    for (const s of settlers) {
+      const d = dist(s.x, s.y, p.px, p.py);
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    selection = best ? { kind: "settler", id: best.id } : { kind: "tile", i: idx(p.tx, p.ty) };
+    return;
+  }
+  drag = { x0: p.tx, y0: p.ty, x1: p.tx, y1: p.ty };
+});
+
+canvas.addEventListener("pointermove", (ev) => {
+  if (pan) {
+    const s = canvasPoint(ev);
+    cam.x = pan.camx - (s.sx - pan.sx) / cam.z;
+    cam.y = pan.camy - (s.sy - pan.sy) / cam.z;
+    clampCam();
+    return;
+  }
+  const p = canvasTile(ev);
+  hover.tx = inBounds(p.tx, p.ty) ? p.tx : -1;
+  hover.ty = p.ty;
+  if (drag && inBounds(p.tx, p.ty)) { drag.x1 = p.tx; drag.y1 = p.ty; }
+});
+
+canvas.addEventListener("pointerup", () => {
+  if (pan) { pan = null; saveState(); return; }
+  if (drag) {
+    applyTool(drag.x0, drag.y0, drag.x1, drag.y1);
+    drag = null;
+    hudDirty = true;
+    saveState();
+  }
+});
+
+canvas.addEventListener("pointercancel", () => { pan = null; drag = null; });
+canvas.addEventListener("pointerleave", () => { hover.tx = -1; });
+canvas.addEventListener("contextmenu", (ev) => { ev.preventDefault(); setTool("info"); });
+// keep the middle button for panning instead of the browser's autoscroll
+canvas.addEventListener("mousedown", (ev) => { if (ev.button === 1) ev.preventDefault(); });
+canvas.addEventListener("auxclick", (ev) => { if (ev.button === 1) ev.preventDefault(); });
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const k = ev.key.toLowerCase();
+  if (k === " ") {
+    ev.preventDefault();
+    setSpeed(speed === 0 ? 1 : 0);
+    return;
+  }
+  if (k === "escape") { setTool("info"); return; }
+  if (k === "arrowleft")  { ev.preventDefault(); panCam(-CFG.PAN_KEY, 0); return; }
+  if (k === "arrowright") { ev.preventDefault(); panCam(CFG.PAN_KEY, 0); return; }
+  if (k === "arrowup")    { ev.preventDefault(); panCam(0, -CFG.PAN_KEY); return; }
+  if (k === "arrowdown")  { ev.preventDefault(); panCam(0, CFG.PAN_KEY); return; }
+  if (k === "0") { resetCam(); saveState(); return; }
+  if (k === "t") { showTemp = !showTemp; showRooms = false; syncPalette(); return; }
+  if (k === "r") { showRooms = !showRooms; showTemp = false; syncPalette(); return; }
+  const t = TOOLS.find(x => x.hot.toLowerCase() === k);
+  if (t) { setTool(t.id); return; }
+  if (k === "+" || k === "=") { setSpeed(Math.min(4, (speed || 1) * 2)); }
+  if (k === "-") { setSpeed(Math.max(1, (speed || 1) / 2)); }
+});
+
+function setSpeed(v) {
+  speed = v;
+  document.querySelectorAll(".speeds button").forEach(b =>
+    b.classList.toggle("active", parseFloat(b.dataset.speed) === speed));
+  saveState();
+}
+
+document.querySelectorAll(".speeds button").forEach(btn => {
+  btn.addEventListener("click", () => setSpeed(parseFloat(btn.dataset.speed)));
+});
+
+function restart() {
+  clearSave();
+  seedWorld();
+  hideOverlay();
+  setSpeed(1);
+  hudDirty = true;
+  saveState();
+}
+
+document.getElementById("restartBtn").addEventListener("click", restart);
+document.getElementById("ovRestart").addEventListener("click", restart);
+
+window.addEventListener("beforeunload", saveState);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveState(); });
+
+// ===================== SIM LOOP =====================
+function simulate(dt) {
+  if (indexDirty) reindex();
+  if (roomsDirty) recomputeRooms();
+
+  dayTimer += dt;
+  while (dayTimer >= CFG.DAY_LENGTH) {
+    dayTimer -= CFG.DAY_LENGTH;
+    endOfDay();
+  }
+
+  jobTimer += dt;
+  if (jobTimer >= CFG.JOB_REFRESH) { jobTimer = 0; refreshJobs(); }
+
+  pathBudget = CFG.PATH_BUDGET;
+  updateWorld(dt);
+  updateSettlers(dt);
+
+  msTimer += dt;
+  if (msTimer >= CFG.MILESTONE_CHECK) { msTimer = 0; checkMilestones(); }
+
+  alertTimer += dt;
+  if (alertTimer >= CFG.ALERT_EVERY) { alertTimer = 0; checkAlerts(); }
+
+  if (indexDirty) reindex();
+  if (roomsDirty) recomputeRooms();
+}
+
+let last = null;
+let saveAccum = 0;
+let hudAccum = 0;
+
+function frame(now) {
+  if (last === null) last = now;
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.1) dt = 0.1;      // clamp big gaps (tab switches) so nothing teleports
+  animT += dt;
+
+  saveAccum += dt;
+  if (saveAccum >= 2) { saveAccum = 0; saveState(); }
+
+  if (running && speed > 0 && settlers.length > 0) {
+    let remaining = dt * speed;
+    while (remaining > 0) {
+      const step = Math.min(0.25, remaining);   // keep each sim step small
+      simulate(step);
+      remaining -= step;
+    }
+    if (settlers.length === 0) {
+      running = false;
+      addLog("The last settler is gone.", "bad");
+      showOverlay();
+      saveState();
+    }
+  }
+
+  draw();
+  hudAccum += dt;
+  if (hudAccum >= 0.12) { hudAccum = 0; updateHUD(); }
+  requestAnimationFrame(frame);
+}
+
+// ===================== SELF-TEST =====================
+// Opened as index.html?selftest=1 - exercises the systems that are hard to eyeball.
+function testWorld() {
+  tiles = new Array(NTILES);
+  for (let i = 0; i < NTILES; i++) {
+    const t = makeTile("grass");
+    t.shade = 0.3;
+    tiles[i] = t;
+  }
+  settlers = []; jobs = []; rooms = []; log = [];
+  res = { wood: 0, stone: 0, fiber: 0, food: 0, meal: 0 };
+  day = 1; dayTimer = CFG.DAY_LENGTH * 0.25; speed = 1; running = true; animT = 0;
+  nextId = 1; nameCursor = 0; peakPop = 0; deaths = 0; treeCount = 0;
+  jobTimer = 0; msTimer = 0; sproutTimer = 0; alertTimer = 0;
+  alerts = {};
+  milestones = makeMilestones();
+  selection = null;
+  reindex();
+  recomputeRooms();
+}
+
+function testSpawn(tx, ty) {
+  const s = makeSettler(idx(tx, ty), false);
+  settlers.push(s);
+  return s;
+}
+
+// Run the colony for a while, stopping as soon as `done` is true. This drives
+// the same path the real loop does (needs, then decisions, then the action), so
+// a test exercises exactly what the game runs.
+function runSteps(steps, dt, done) {
+  for (let k = 0; k < steps; k++) {
+    if (indexDirty) reindex();
+    if (roomsDirty) recomputeRooms();
+    pathBudget = CFG.PATH_BUDGET;
+    refreshJobs();
+    updateSettlers(dt);
+    if (indexDirty) reindex();
+    if (roomsDirty) recomputeRooms();
+    if (done && done()) return k;
+  }
+  return -1;
+}
+
+function runSelfTest() {
+  selfTesting = true;
+  const out = [];
+  let pass = 0, fail = 0;
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const head = (t) => out.push("<h4>" + esc(t) + "</h4>");
+  const ok = (label, cond, detail) => {
+    if (cond) { pass++; out.push('<span class="ok">  PASS</span>  ' + esc(label)); }
+    else { fail++; out.push('<span class="fail">  FAIL</span>  ' + esc(label) + (detail ? "   — " + esc(detail) : "")); }
+  };
+  const near = (a, b, eps) => Math.abs(a - b) <= (eps === undefined ? 0.001 : eps);
+
+  try {
+    // ---------- pathfinding ----------
+    head("Pathfinding");
+    testWorld();
+    let p = findPath(idx(2, 2), idx(10, 8));
+    ok("finds a path across open ground", !!p && p.length >= 8, p ? "len " + p.length : "null");
+    ok("path ends on the goal tile", !!p && p[p.length - 1] === idx(10, 8));
+    ok("zero-length path to self", findPath(idx(4, 4), idx(4, 4)).length === 0);
+
+    testWorld();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      tiles[idx(10 + dx, 8 + dy)].bld = { kind: "swall" };
+    }
+    reindex();
+    ok("returns null when the goal is walled in", findPath(idx(2, 2), idx(10, 8)) === null);
+
+    testWorld();
+    for (let ty = 0; ty < ROWS; ty++) if (ty !== ROWS - 2) tiles[idx(5, ty)].bld = { kind: "wall" };
+    reindex();
+    p = findPath(idx(2, 2), idx(8, 2));
+    ok("routes around a wall instead of through it", !!p && p.every(i => txOf(i) !== 5 || tyOf(i) === ROWS - 2),
+       p ? "len " + p.length : "null");
+    ok("...and the detour is longer than the direct line", !!p && p.length > 20, p ? "len " + p.length : "null");
+
+    // ---------- rooms ----------
+    head("Rooms and enclosure");
+    testWorld();
+    for (let x = 9; x <= 13; x++) { tiles[idx(x, 9)].bld = { kind: "wall" }; tiles[idx(x, 13)].bld = { kind: "wall" }; }
+    for (let y = 9; y <= 13; y++) { tiles[idx(9, y)].bld = { kind: "wall" }; tiles[idx(13, y)].bld = { kind: "wall" }; }
+    reindex(); recomputeRooms();
+    ok("a sealed 3x3 counts as one room", rooms.length === 1, "rooms " + rooms.length);
+    ok("interior tiles are flagged indoors", tiles[idx(11, 11)].room >= 0);
+    ok("tiles outside are not", tiles[idx(20, 20)].room === -1);
+
+    tiles[idx(11, 9)].bld = null;        // punch a hole in the wall
+    reindex(); recomputeRooms();
+    ok("an opening breaks the enclosure", tiles[idx(11, 11)].room === -1 && rooms.length === 0);
+
+    tiles[idx(11, 9)].bld = { kind: "door" };
+    reindex(); recomputeRooms();
+    ok("a door re-seals the room", tiles[idx(11, 11)].room >= 0);
+
+    const woodInsul = rooms[0].insul;
+    for (let x = 9; x <= 13; x++) { tiles[idx(x, 9)].bld = { kind: "swall" }; tiles[idx(x, 13)].bld = { kind: "swall" }; }
+    for (let y = 9; y <= 13; y++) { tiles[idx(9, y)].bld = { kind: "swall" }; tiles[idx(13, y)].bld = { kind: "swall" }; }
+    reindex(); recomputeRooms();
+    ok("a stone shell insulates better than wood", rooms[0].insul > woodInsul + 3,
+       "wood " + woodInsul.toFixed(1) + " vs stone " + rooms[0].insul.toFixed(1));
+
+    tiles[idx(11, 11)].bld = { kind: "bed" };
+    tiles[idx(10, 11)].bld = { kind: "bed" };
+    tiles[idx(12, 11)].bld = { kind: "bed" };
+    reindex(); recomputeRooms();
+    ok("a room counts the beds inside it", rooms[0].beds === 3, "beds " + rooms[0].beds);
+
+    // ---------- temperature and warmth ----------
+    head("Temperature and warmth");
+    testWorld();
+    day = 1; dayTimer = CFG.DAY_LENGTH * 0.25;
+    const amb = ambientTemp();
+    tiles[idx(20, 20)].bld = { kind: "fire", fuel: CFG.FIRE_FUEL_MAX };
+    reindex();
+    ok("a lit fire heats its own tile", localTemp(cx(idx(20, 20)), cy(idx(20, 20))) > amb + 20);
+    ok("warmth falls off with distance", localTemp(cx(idx(23, 20)), cy(idx(23, 20))) < localTemp(cx(idx(21, 20)), cy(idx(21, 20))));
+    ok("beyond the radius there is no help", near(localTemp(cx(idx(28, 20)), cy(idx(28, 20))), amb, 0.01));
+    tiles[idx(20, 20)].bld.fuel = 0;
+    ok("a fire with no fuel gives no heat", near(localTemp(cx(idx(20, 20)), cy(idx(20, 20))), amb, 0.01));
+
+    ok("nights are colder than middays", ambientTemp(0.85, 1) < ambientTemp(0.5, 1));
+    ok("later days are colder than early ones", ambientTemp(0.5, 20) < ambientTemp(0.5, 1));
+    ok("the seasonal slide has a floor", seasonBase(999) === CFG.TEMP_BASE_FLOOR);
+
+    testWorld();
+    day = 10; dayTimer = CFG.DAY_LENGTH * 0.85;       // a cold night
+    let s = testSpawn(30, 30);
+    s.warmth = 80;
+    updateNeeds(s, 5);
+    ok("a settler outdoors at night loses warmth", s.warmth < 80, "warmth " + s.warmth.toFixed(1));
+
+    tiles[idx(30, 30)].bld = { kind: "fire", fuel: CFG.FIRE_FUEL_MAX };
+    reindex();
+    const before = s.warmth;
+    updateNeeds(s, 3);
+    ok("standing at a fire warms them back up", s.warmth > before, "warmth " + s.warmth.toFixed(1));
+
+    testWorld();
+    day = 30; dayTimer = CFG.DAY_LENGTH * 0.85;
+    s = testSpawn(30, 30);
+    s.warmth = 0; s.health = 10;
+    updateNeeds(s, 3);
+    ok("zero warmth costs health", s.health < 10, "health " + s.health.toFixed(1));
+
+    // ---------- the work loop ----------
+    head("Orders, jobs and hauling");
+    testWorld();
+    const treeI = idx(20, 18);
+    tiles[treeI].obj = { kind: "tree", amount: CFG.TREE_WOOD, regrow: 0 };
+    treeCount = 1;
+    ok("the chop tool only takes on trees", setOrder(treeI, "chop") === true && setOrder(idx(21, 18), "chop") === false);
+    ok("the mine tool refuses a tree", setOrder(treeI, "mine") === false);
+    refreshJobs();
+    ok("an order creates exactly one job", jobs.length === 1 && jobs[0].kind === "chop", "jobs " + jobs.length);
+
+    s = testSpawn(18, 18);
+    ok("a settler claims the job", claimJob(s) === true && s.job !== null && jobs[0].by === s.id);
+    ok("a claimed job is not offered twice", (() => { const s2 = testSpawn(17, 18); return claimJob(s2) === false; })());
+    settlers.pop();
+
+    let steps = runSteps(400, 0.1, () => !tiles[treeI].obj);
+    ok("felling the tree removes it", steps >= 0 && !tiles[treeI].obj, "steps " + steps);
+    ok("...and leaves wood on the ground", !!tiles[treeI].pile && tiles[treeI].pile.kind === "wood" &&
+       tiles[treeI].pile.amount === CFG.TREE_WOOD);
+    ok("...and clears the order", tiles[treeI].order === null);
+    ok("...and the tree count drops", treeCount === 0);
+
+    refreshJobs();
+    ok("no stockpile means no haul job", !jobs.some(j => j.kind === "haul"));
+    tiles[idx(16, 18)].bld = { kind: "stock" };
+    reindex();
+    refreshJobs();
+    ok("a stockpile creates the haul job", jobs.some(j => j.kind === "haul"));
+
+    steps = runSteps(600, 0.1, () => res.wood > 0);
+    ok("the pile is hauled into the stockpile", res.wood === CFG.TREE_WOOD, "wood " + res.wood);
+    ok("...and the ground is clear", !tiles[treeI].pile);
+    ok("...and nobody is still carrying it", settlers.every(x => !x.carrying));
+
+    // ---------- berries regrow ----------
+    head("Regrowth");
+    testWorld();
+    const bI = idx(22, 22);
+    tiles[bI].obj = { kind: "berry", amount: CFG.BERRY_FOOD, regrow: 0 };
+    setOrder(bI, "gather");
+    testSpawn(21, 22);
+    steps = runSteps(400, 0.1, () => tiles[bI].obj.amount === 0);
+    ok("picking a bush empties but keeps it", steps >= 0 && !!tiles[bI].obj && tiles[bI].obj.amount === 0);
+    ok("...and it is left regrowing", tiles[bI].obj.regrow > 0);
+    updateWorld(CFG.BERRY_REGROW + 1);
+    ok("...and comes back ripe", tiles[bI].obj.amount === CFG.BERRY_FOOD);
+
+    // ---------- building ----------
+    head("Building and tear-down");
+    testWorld();
+    res.wood = 10;
+    const wI = idx(25, 25);
+    ok("a blueprint goes down on clear ground", placeBlueprint(wI, "wall") === true);
+    ok("a farm refuses stone ground", (() => { tiles[idx(26, 25)].terrain = "stone"; return placeBlueprint(idx(26, 25), "farm") === false; })());
+    ok("nothing builds on water", (() => { tiles[idx(27, 25)].terrain = "water"; return placeBlueprint(idx(27, 25), "wall") === false; })());
+    testSpawn(23, 25);
+    steps = runSteps(500, 0.1, () => !!tiles[wI].bld);
+    ok("the wall gets built", steps >= 0 && !!tiles[wI].bld && tiles[wI].bld.kind === "wall", "steps " + steps);
+    ok("...and the materials are deducted", res.wood === 10 - BLD.wall.cost.wood, "wood " + res.wood);
+    ok("...and the blueprint is gone", tiles[wI].bp === null);
+
+    ok("cancel marks a finished building for tear-down", cancelAt(wI) === true && tiles[wI].decon === true);
+    steps = runSteps(500, 0.1, () => !tiles[wI].bld);
+    ok("the wall comes down", steps >= 0 && tiles[wI].bld === null, "steps " + steps);
+    ok("...refunding half the materials", !!tiles[wI].pile && tiles[wI].pile.amount === Math.floor(BLD.wall.cost.wood * 0.5));
+
+    testWorld();
+    res.wood = 10;
+    const eI = idx(25, 25);
+    let es = testSpawn(25, 25);          // standing exactly where a wall will go
+    placeBlueprint(eI, "wall");
+    steps = runSteps(500, 0.1, () => !!tiles[eI].bld);
+    ok("a wall can be built where a settler stands", steps >= 0 && !!tiles[eI].bld, "steps " + steps);
+    ok("...and the settler is pushed clear, not entombed", settlerTile(es) !== eI && walkable(settlerTile(es)),
+       "tile " + settlerTile(es));
+    ok("...and can still path somewhere afterwards", findPath(settlerTile(es), idx(2, 2)) !== null);
+    ok("a settler sealed into a wall can still path out",
+       (() => { es.x = cx(eI); es.y = cy(eI); return findPath(settlerTile(es), idx(2, 2)) !== null; })());
+
+    testWorld();
+    res.wood = 0;
+    placeBlueprint(idx(25, 25), "wall");
+    refreshJobs();
+    s = testSpawn(23, 25);
+    ok("an unaffordable blueprint is not claimed", claimJob(s) === false && !tiles[idx(25, 25)].bld);
+
+    testWorld();
+    res.wood = 10;
+    tiles[idx(25, 25)].obj = { kind: "tree", amount: CFG.TREE_WOOD, regrow: 0 };
+    placeBlueprint(idx(25, 25), "wall");
+    ok("building over a tree orders it cleared first", tiles[idx(25, 25)].order === "chop");
+    refreshJobs();
+    ok("...and the build job waits for the tree", !jobs.some(j => j.kind === "build"));
+    testSpawn(23, 25);
+    steps = runSteps(900, 0.1, () => !!tiles[idx(25, 25)].bld);
+    ok("...then builds once the tree is down", steps >= 0 && !!tiles[idx(25, 25)].bld, "steps " + steps);
+
+    for (const kind of ["berry", "reeds"]) {
+      testWorld();
+      res.wood = 10;
+      const oI = idx(25, 25);
+      tiles[oI].obj = { kind, amount: 0, regrow: OBJ[kind].regrow };   // already picked bare
+      placeBlueprint(oI, "wall");
+      testSpawn(23, 25);
+      steps = runSteps(900, 0.1, () => !!tiles[oI].bld);
+      ok("a picked-bare " + kind + " patch can be cleared and built over",
+         steps >= 0 && !!tiles[oI].bld && tiles[oI].obj === null, "steps " + steps);
+    }
+
+    // a sealed room has to be reachable end to end: build one and check it holds
+    testWorld();
+    res.wood = 200;
+    tiles[idx(16, 15)].obj = { kind: "berry", amount: 0, regrow: 50 };   // in the way
+    tiles[idx(17, 12)].obj = { kind: "tree", amount: CFG.TREE_WOOD, regrow: 0 };
+    for (let tx = 14; tx <= 20; tx++) { placeBlueprint(idx(tx, 12), "wall"); placeBlueprint(idx(tx, 18), "wall"); }
+    for (let ty = 12; ty <= 18; ty++) { placeBlueprint(idx(14, ty), "wall"); placeBlueprint(idx(20, ty), "wall"); }
+    placeBlueprint(idx(20, 15), "door");
+    for (let n = 0; n < 4; n++) testSpawn(22 + n, 15);
+    steps = runSteps(4000, 0.1, () => rooms.length > 0);
+    ok("settlers can seal a room from blueprints alone", steps >= 0 && rooms.length > 0,
+       "rooms " + rooms.length + ", unbuilt " + (() => { let c = 0; for (let i = 0; i < NTILES; i++) if (tiles[i].bp) c++; return c; })());
+    ok("...and the inside reads as indoors", tiles[idx(17, 15)].room >= 0);
+    ok("...and it is warmer inside than out",
+       localTemp(cx(idx(17, 15)), cy(idx(17, 15))) > localTemp(cx(idx(30, 30)), cy(idx(30, 30))));
+
+    // beds built after the walls went up still have to count toward the room
+    res.wood = 200; res.fiber = 200;
+    ok("the sealed room starts with no beds", rooms[0].beds === 0);
+    for (const [bx, by] of [[16, 14], [17, 14], [18, 14]]) placeBlueprint(idx(bx, by), "bed");
+    steps = runSteps(3000, 0.1, () => rooms.length > 0 && rooms[0].beds >= 3);
+    ok("beds added to a finished room are counted", steps >= 0 && rooms[0].beds >= 3,
+       "beds " + (rooms[0] ? rooms[0].beds : "no room"));
+    checkMilestones();
+    ok("...which earns the Shelter milestone", milestones.find(m => m.key === "roof").done === true);
+
+    // ---------- fire and cooking ----------
+    head("Fire and cooking");
+    testWorld();
+    const fI = idx(24, 24);
+    tiles[fI].bld = { kind: "fire", fuel: 0 };
+    tiles[idx(22, 24)].bld = { kind: "stock" };
+    reindex();
+    res.wood = 10;
+    refreshJobs();
+    ok("an empty fire asks to be refuelled", jobs.some(j => j.kind === "refuel"));
+    testSpawn(22, 24);
+    steps = runSteps(400, 0.1, () => tiles[fI].bld.fuel > 0);
+    ok("a settler feeds the fire", steps >= 0 && tiles[fI].bld.fuel > 0, "fuel " + tiles[fI].bld.fuel);
+    ok("...paying wood for it", res.wood === 10 - CFG.FIRE_WOOD_PER_REFUEL, "wood " + res.wood);
+
+    res.food = 10; res.meal = 0;
+    refreshJobs();
+    ok("raw food at a lit fire creates a cook job", jobs.some(j => j.kind === "cook"));
+    steps = runSteps(400, 0.1, () => res.meal > 0);
+    ok("cooking yields meals", res.meal === CFG.COOK_YIELD, "meals " + res.meal);
+    ok("...consuming raw food", res.food === 10 - CFG.COOK_BATCH, "food " + res.food);
+
+    // ---------- eating ----------
+    head("Eating");
+    testWorld();
+    tiles[idx(24, 24)].bld = { kind: "stock" };
+    reindex();
+    res.meal = 2;
+    s = testSpawn(22, 24);
+    s.hunger = 20;
+    steps = runSteps(600, 0.1, () => s.hunger > 70);
+    ok("a hungry settler walks over and eats", steps >= 0 && s.hunger > 70, "hunger " + s.hunger.toFixed(0));
+    ok("...which uses up a meal", res.meal < 2, "meals " + res.meal);
+
+    // ---------- farms ----------
+    head("Farming");
+    testWorld();
+    const farmI = idx(26, 26);
+    tiles[farmI].bld = { kind: "farm", growth: 0 };
+    tiles[idx(24, 26)].bld = { kind: "stock" };
+    reindex();
+    refreshJobs();
+    ok("an unripe plot offers no work", !jobs.some(j => j.kind === "harvest"));
+    updateWorld(CFG.FARM_GROW + 1);
+    ok("a plot ripens over time", tiles[farmI].bld.growth >= 1);
+    refreshJobs();
+    ok("...then asks to be harvested", jobs.some(j => j.kind === "harvest"));
+    testSpawn(25, 26);
+    steps = runSteps(800, 0.1, () => res.food > 0);
+    ok("harvesting banks food", res.food === CFG.FARM_FOOD, "food " + res.food);
+    ok("...and resets the plot", tiles[farmI].bld.growth === 0);
+
+    // ---------- sleeping ----------
+    head("Sleep");
+    testWorld();
+    day = 1; dayTimer = CFG.DAY_LENGTH * 0.85;      // night
+    const bedI = idx(28, 28);
+    tiles[bedI].bld = { kind: "bed", owner: 0 };
+    reindex();
+    s = testSpawn(26, 28);
+    s.stamina = 30;
+    steps = runSteps(900, 0.1, () => settlerTile(s) === bedI && s.stamina > 60);
+    ok("a tired settler claims a bed and sleeps in it", steps >= 0 && s.bed === bedI, "steps " + steps);
+    ok("...and recovers stamina", s.stamina > 60, "stamina " + s.stamina.toFixed(0));
+    ok("...and the bed is marked as theirs", tiles[bedI].bld.owner === s.id);
+
+    // ---------- milestones ----------
+    head("Milestones");
+    testWorld();
+    checkMilestones();
+    ok("no milestones are handed out for free", milestones.every(m => !m.done));
+    tiles[idx(20, 20)].bld = { kind: "fire", fuel: 50 };
+    reindex();
+    checkMilestones();
+    ok("a burning fire earns First Light", milestones.find(m => m.key === "fire").done === true);
+    res.food = 40; res.meal = 10;
+    checkMilestones();
+    ok("stored food earns Larder", milestones.find(m => m.key === "food").done === true);
+
+    // ---------- camera ----------
+    head("Camera");
+    testWorld();
+    resetCam();
+    ok("starts zoomed out to fit the whole map", cam.z === CFG.ZOOM_MIN && cam.x === 0 && cam.y === 0);
+    zoomTo(0.1, 0, 0, 0, 0);
+    ok("will not zoom out past the map", cam.z === CFG.ZOOM_MIN, "z " + cam.z);
+    zoomTo(99, 500, 400, 100, 100);
+    ok("will not zoom in past the limit", cam.z === CFG.ZOOM_MAX, "z " + cam.z);
+
+    resetCam();
+    const anchorSX = 400, anchorSY = 300;
+    const anchorWX = anchorSX / cam.z + cam.x, anchorWY = anchorSY / cam.z + cam.y;
+    zoomTo(2.5, anchorWX, anchorWY, anchorSX, anchorSY);
+    ok("zooms around the point under the cursor",
+       near((anchorWX - cam.x) * cam.z, anchorSX, 0.01) && near((anchorWY - cam.y) * cam.z, anchorSY, 0.01),
+       "off by " + ((anchorWX - cam.x) * cam.z - anchorSX).toFixed(3));
+
+    panCam(999, 999);
+    ok("panning stops at the far edge",
+       near(cam.x, COLS * TILE - canvas.width / cam.z, 0.01) && near(cam.y, ROWS * TILE - canvas.height / cam.z, 0.01),
+       "cam " + cam.x.toFixed(1) + "," + cam.y.toFixed(1));
+    panCam(-999, -999);
+    ok("...and at the near edge", cam.x === 0 && cam.y === 0);
+
+    zoomTo(1, 0, 0, 0, 0);
+    ok("zooming back out re-centres on the whole map", cam.x === 0 && cam.y === 0);
+
+    const countVisible = () => { let n = 0; forVisibleTiles(() => n++); return n; };
+    resetCam(); updateViewBounds();
+    ok("zoomed out, every tile is drawn", countVisible() === NTILES, "visible " + countVisible());
+    zoomTo(CFG.ZOOM_MAX, 0, 0, 0, 0); updateViewBounds();
+    ok("zoomed in, off-screen tiles are skipped", countVisible() < NTILES / 4, "visible " + countVisible());
+
+    ok("a screen point still maps to the tile under it when zoomed", (() => {
+      zoomTo(3, 600, 450, 576, 432);
+      updateViewBounds();
+      const t = idx(vb.x0 + 2, vb.y0 + 1);
+      const sx = (cx(t) - cam.x) * cam.z, sy = (cy(t) - cam.y) * cam.z;
+      return tileAtPx(sx / cam.z + cam.x, sy / cam.z + cam.y) === t;
+    })());
+    ok("the whole map stays reachable by panning", (() => {
+      zoomTo(CFG.ZOOM_MAX, 0, 0, 0, 0);
+      panCam(999, 999); updateViewBounds();
+      const bottomRight = vb.x1 === COLS - 1 && vb.y1 === ROWS - 1;
+      panCam(-999, -999); updateViewBounds();
+      return bottomRight && vb.x0 === 0 && vb.y0 === 0;
+    })());
+    resetCam();
+
+    // ---------- save / load ----------
+    head("Save and load");
+    let stash = null;
+    try { stash = localStorage.getItem(SAVE_KEY); } catch (e) { stash = null; }
+    selfTesting = false;                       // let saveState actually write
+    seedWorld();
+    day = 7; dayTimer = 33.5;
+    res.wood = 123; res.meal = 9;
+    tiles[idx(30, 20)].bld = { kind: "fire", fuel: 42 };
+    tiles[idx(31, 20)].obj = { kind: "tree", amount: 4, regrow: 0 };
+    setOrder(idx(31, 20), "chop");
+    reindex();
+    const popBefore = settlers.length;
+    const namesBefore = settlers.map(x => x.name).join(",");
+    saveState();
+    const loaded = loadState();
+    selfTesting = true;
+    ok("the save round-trips", loaded === true);
+    ok("...keeping the day and clock", day === 7 && near(dayTimer, 33.5, 0.01), "day " + day);
+    ok("...keeping resources", res.wood === 123 && res.meal === 9, "wood " + res.wood);
+    ok("...keeping settlers", settlers.length === popBefore && settlers.map(x => x.name).join(",") === namesBefore);
+    ok("...keeping buildings and their state", !!tiles[idx(30, 20)].bld && tiles[idx(30, 20)].bld.fuel === 42);
+    ok("...keeping orders and scatter", tiles[idx(31, 20)].order === "chop" && !!tiles[idx(31, 20)].obj);
+    ok("...and rebuilding the building index", fireIdx.includes(idx(30, 20)));
+    zoomTo(2, 300, 200, 100, 100);
+    const camBefore = { x: cam.x, y: cam.y, z: cam.z };
+    selfTesting = false; saveState(); resetCam(); loadState(); selfTesting = true;
+    ok("...and the saved view comes back",
+       near(cam.z, camBefore.z, 0.001) && near(cam.x, camBefore.x, 0.01) && near(cam.y, camBefore.y, 0.01),
+       "z " + cam.z + " vs " + camBefore.z);
+    try { if (stash === null) localStorage.removeItem(SAVE_KEY); else localStorage.setItem(SAVE_KEY, stash); } catch (e) { /* ignore */ }
+
+    // ---------- long run ----------
+    head("Five simulated days");
+    seedWorld();
+    let crash = null;
+    const t0 = performance.now();
+    try {
+      let guard = 0;
+      while (day < 6 && guard++ < 40000) simulate(0.2);
+    } catch (e) {
+      crash = e && e.message ? e.message : String(e);
+    }
+    const ms = Math.round(performance.now() - t0);
+    ok("five days run without throwing", crash === null, crash || "");
+    ok("the day counter advanced", day >= 6, "day " + day);
+    const finite = (v) => typeof v === "number" && isFinite(v);
+    ok("no settler need went NaN", settlers.every(x =>
+      finite(x.hunger) && finite(x.stamina) && finite(x.warmth) && finite(x.health) && finite(x.x) && finite(x.y)));
+    ok("resources stayed finite and non-negative", Object.values(res).every(v => finite(v) && v >= -0.001),
+      JSON.stringify(res));
+    ok("every open job is still valid", jobs.every(jobValid));
+    ok("settlers stayed on the map", settlers.every(x => x.x >= 0 && x.x <= COLS * TILE && x.y >= 0 && x.y <= ROWS * TILE));
+    out.push("");
+    out.push("  info: " + settlers.length + " settlers alive, " + deaths + " died, " +
+             peakPop + " peak, " + jobs.length + " open jobs, simulated in " + ms + "ms");
+    out.push("  info: newcomers arrive at dawn - population should have grown past 3 unless the cold took them");
+  } catch (e) {
+    fail++;
+    out.push('<span class="fail">  HARNESS ERROR</span>  ' + esc(e && e.stack ? e.stack : e));
+  }
+
+  const panel = document.getElementById("selftest");
+  panel.innerHTML =
+    '<div style="font-family:system-ui,sans-serif;font-size:18px;font-weight:700;color:#9fe6b0">GATHER — self test</div>' +
+    '<div style="color:#8b94a3;font-family:system-ui,sans-serif;font-size:13px;margin-bottom:6px">' +
+    'Reload without <b>?selftest=1</b> to play. Your saved colony was left untouched.</div>' +
+    out.join("\n") +
+    '<div class="sum ' + (fail === 0 ? "ok" : "fail") + '">' +
+    (fail === 0 ? "ALL " + pass + " CHECKS PASSED" : pass + " passed, " + fail + " FAILED") + "</div>";
+  panel.classList.add("show");
+  if (fail === 0) console.log("GATHER self-test: all " + pass + " checks passed");
+  else console.error("GATHER self-test: " + fail + " of " + (pass + fail) + " checks failed");
+}
+
+// ===================== BOOT =====================
+function init() {
+  if (/[?&]selftest=1/.test(location.search)) {
+    buildPalette();
+    runSelfTest();
+    return;
+  }
+
+  animT = 0;
+  if (!loadState()) {
+    speed = 1;
+    seedWorld();
+  }
+  buildPalette();
+  if (settlers.length === 0) { running = false; showOverlay(); }
+  else hideOverlay();
+
+  setSpeed(speed === 0 ? 0 : (speed || 1));
+  hudDirty = true;
+  updateHUD();
+  requestAnimationFrame(frame);
+}
+
+init();
+</script>
+</body>
+</html>
